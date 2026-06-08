@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,8 @@ from app.agents.base import AgentResponse, get_agent
 from app.config import settings
 from app.engine.state_machine import StepHandler, register_handler
 from app.engine.yaml_parser import StepDefinition
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT_ANALYZE = """你是一位资深软件工程师。你的任务是分析一个 Issue 或需求，并输出一个结构化的修复方案。
