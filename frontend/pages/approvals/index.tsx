@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Typography, Card, Space, Tag, Button, message, Empty, Descriptions, Popconfirm } from "antd";
 import { ReloadOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
-import { approvalApi, taskApi } from "@/lib/api";
+import { approvalApi } from "@/lib/api";
 import type { ApprovalItem } from "@/lib/api";
 
 const { Title, Text } = Typography;
@@ -48,7 +48,7 @@ export default function ApprovalsPage() {
       {loading ? (
         <Card loading />
       ) : approvals.length === 0 ? (
-        <Empty description="暂无待审批项" />
+        <Empty description="暂无待审批" />
       ) : (
         <Space direction="vertical" style={{ width: "100%" }} size="middle">
           {approvals.map((approval) => (
@@ -64,7 +64,7 @@ export default function ApprovalsPage() {
               extra={
                 <Space>
                   <Popconfirm
-                    title="确认批准？"
+                    title="确定批准吗？"
                     onConfirm={() => handleDecide(approval.id, "approved")}
                     okText="批准"
                     cancelText="取消"
@@ -74,7 +74,7 @@ export default function ApprovalsPage() {
                     </Button>
                   </Popconfirm>
                   <Popconfirm
-                    title="确认拒绝？"
+                    title="确定拒绝吗？"
                     onConfirm={() => handleDecide(approval.id, "rejected")}
                     okText="拒绝"
                     cancelText="取消"

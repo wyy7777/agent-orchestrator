@@ -37,3 +37,8 @@ backend/static/
 
 # Data
 ~/.agent-orch/
+desktop-tauri/src-tauri/target/
+backend/static/
+backend/dist/
+backend/build/
+desktop-tauri/src-tauri/binaries/

@@ -1,0 +1,45 @@
+{
+  "productName": "Agent Orchestrator",
+  "version": "0.2.0",
+  "identifier": "com.agent-orchestrator.desktop",
+  "build": {
+    "frontendDist": "../../frontend/out",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "",
+    "beforeDevCommand": ""
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "externalBin": ["binaries/agent-orch-backend"],
+    "windows": {
+      "nsis": {
+        "installMode": "both"
+      }
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Agent Orchestrator",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src http://127.0.0.1:18000 ws://127.0.0.1:18000 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

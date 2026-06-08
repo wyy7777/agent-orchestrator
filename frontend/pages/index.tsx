@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Typography, Spin, message, Card, Table, Tag, Button, Space } from "antd";
-import { PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { Typography, Spin, message, Card, Table, Tag, Button, Space, Empty } from "antd";
+import { PlusOutlined, ReloadOutlined, RocketOutlined } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import DashboardStats from "@/components/DashboardStats";
 import { dashboardApi, taskApi, workflowApi } from "@/lib/api";
 import type { DashboardStatsData, TaskItem, WorkflowItem } from "@/lib/api";
 
-const { Title, Text } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 const statusColors: Record<string, string> = {
   pending: "default",
@@ -74,7 +74,18 @@ export default function DashboardPage() {
             </Button>
           }
         >
-          <Table
+          {recentTasks.length === 0 && !loading ? (
+            <Empty description="还没有执行过任务">
+              <Button
+                type="primary"
+                icon={<RocketOutlined />}
+                onClick={() => router.push("/workflows")}
+              >
+                去创建工作流
+              </Button>
+            </Empty>
+          ) : (
+            <Table
             dataSource={recentTasks}
             rowKey="id"
             pagination={false}
@@ -122,8 +133,10 @@ export default function DashboardPage() {
               },
             ]}
           />
+          )}
         </Card>
       </Spin>
     </div>
   );
 }
+

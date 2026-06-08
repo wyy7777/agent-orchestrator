@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Typography, Card, Descriptions, Tag, Button, Space, message, Spin,
-  Modal, Form, Input, Divider, Table,
+  Modal, Table,
 } from "antd";
 import { EditOutlined, PlayCircleOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import { useRouter } from "next/router";
@@ -71,7 +71,7 @@ export default function WorkflowDetailPage() {
     try {
       const task = await taskApi.create({ workflow_id: id as string, trigger_type: "manual" });
       await taskApi.start(task.id);
-      message.success("任务已启动");
+      message.success("任务已创建");
       router.push(`/tasks/detail?id=${task.id}`);
     } catch (err) {
       message.error((err as Error).message);
