@@ -221,6 +221,11 @@ class ExecutionEngine:
                         context["results"][step_exec.step_name] = output
                         logger.info(f"步骤 '{step_exec.step_name}' 完成, tokens={tokens}")
 
+                        # merge 步骤完成后保存 PR URL
+                        if step_def.type == "merge" and "pr_url" in output:
+                            task.pr_url = output["pr_url"]
+                            logger.info(f"PR 已创建: {output['pr_url']}")
+
                     except Exception as e:
                         step_exec.status = StepStatus.FAILED.value
                         step_exec.error_message = str(e)
