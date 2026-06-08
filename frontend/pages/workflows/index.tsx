@@ -58,7 +58,7 @@ export default function WorkflowListPage() {
   const handleDelete = async (id: string) => {
     try {
       await workflowApi.delete(id);
-      message.success("��ɾ��");
+      message.success("已删除");
       load();
     } catch (err) {
       message.error((err as Error).message);
