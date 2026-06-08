@@ -1,0 +1,42 @@
+# Bug 自动修复工作流
+name: Bug 自动修复
+description: 分析 Issue → 生成修复方案 → 人工审批 → 自动修复 → 代码审查 → 合并 PR
+
+steps:
+  - name: 分析问题
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## Issue 信息
+      {issue}
+
+      ## 相关代码
+      {code}
+
+      请分析这个 Bug 的根因，输出结构化的修复方案。
+
+  - name: 方案审批
+    type: approval
+    timeout: 3600
+
+  - name: 执行修复
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+
+  - name: 代码审查
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek
+
+  - name: 最终审批
+    type: approval
+    timeout: 3600
+
+  - name: 创建 PR
+    type: merge
+    timeout: 60

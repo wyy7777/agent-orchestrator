@@ -1,0 +1,36 @@
+# 代码重构工作流
+name: 代码重构
+description: 分析代码结构，提出重构方案，执行重构
+
+steps:
+  - name: 重构分析
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## 代码
+      {code}
+
+      请分析这段代码的重构机会：
+      1. 重复代码提取
+      2. 函数拆分
+      3. 设计模式应用
+      4. 类型安全改进
+      5. 性能优化
+
+  - name: 重构审批
+    type: approval
+    timeout: 3600
+
+  - name: 执行重构
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+
+  - name: 重构审查
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek

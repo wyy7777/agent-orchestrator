@@ -49,3 +49,24 @@ release/
 
 # 安装产物（防止误提交）
 "Agent Orchestrator/"
+
+# PyInstaller
+backend/dist/
+backend/build/
+backend/*.spec
+
+# 安装产物
+Agent Orchestrator/
+
+# 前端构建残留
+frontend/.next/
+frontend/out/
+frontend/AGENTS.md
+frontend/CLAUDE.md
+
+# 日志
+*.log
+
+# Alembic
+backend/alembic/versions/*.py
+!backend/alembic/versions/.gitkeep

@@ -4,13 +4,9 @@ import { ReloadOutlined, RocketOutlined } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { taskApi, workflowApi } from "@/lib/api";
 import type { TaskItem, WorkflowItem } from "@/lib/api";
+import { statusColors } from "@/lib/constants";
 
 const { Title } = Typography;
-
-const statusColors: Record<string, string> = {
-  pending: "default", running: "processing", paused: "warning",
-  completed: "success", failed: "error", rolled_back: "orange",
-};
 
 export default function TaskListPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);

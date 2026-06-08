@@ -5,17 +5,9 @@ import { useRouter } from "next/router";
 import DashboardStats from "@/components/DashboardStats";
 import { dashboardApi, taskApi, workflowApi } from "@/lib/api";
 import type { DashboardStatsData, TaskItem, WorkflowItem } from "@/lib/api";
+import { statusColors } from "@/lib/constants";
 
 const { Title, Text, Paragraph } = Typography;
-
-const statusColors: Record<string, string> = {
-  pending: "default",
-  running: "processing",
-  paused: "warning",
-  completed: "success",
-  failed: "error",
-  rolled_back: "orange",
-};
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStatsData | null>(null);

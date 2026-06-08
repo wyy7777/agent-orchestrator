@@ -130,6 +130,10 @@ class ExecuteHandler(StepHandler):
                         content = change.get("content")
                         explanation = change.get("explanation", "")
                         if file_path and content:
+                            # 路径校验已在 write_file 中处理，但提前过滤明显非法路径
+                            if ".." in file_path or file_path.startswith("/"):
+                                logger.warning(f"跳过不安全路径: {file_path}")
+                                continue
                             await write_file(
                                 owner, repo, git_branch,
                                 file_path=file_path,
@@ -144,6 +148,14 @@ class ExecuteHandler(StepHandler):
                 )
             except Exception as e:
                 logger.warning(f"文件写入失败（GitHub API）: {e}")
+                return {
+                    "changes": changes,
+                    "written_files": [],
+                    "pr_body": str(changes),
+                    "tokens_used": response.tokens_used,
+                    "model": response.model,
+                    "error": f"GitHub 写入失败: {e}",
+                }
 
         return {
             "changes": changes,
@@ -245,7 +257,7 @@ class MergeHandler(StepHandler):
             analysis = analyze_result.get("analysis", {})
             issue_title = analysis.get("analysis", "Agent 自动修复")[:80]
 
-            review_result = context.get("results", {}).get("review_code", {})
+            review_result = context.get("results", {}).get("review", {})
             review = review_result.get("review", {})
 
             execute_result = context.get("results", {}).get("execute", {})

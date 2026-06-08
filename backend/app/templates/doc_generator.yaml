@@ -1,0 +1,35 @@
+# 文档生成工作流
+name: 文档生成
+description: 自动为代码生成文档和注释
+
+steps:
+  - name: 分析代码
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## 代码
+      {code}
+
+      请分析这段代码的功能，确定需要生成哪些文档：
+      1. README 章节
+      2. API 文档
+      3. 代码注释
+      4. 使用示例
+
+  - name: 生成文档
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+    prompt_template: |
+      基于分析结果，为以下代码生成文档。
+
+      ## 分析结果
+      {plan}
+
+      ## 代码
+      {code}
+
+      生成的文档应该清晰、专业、有实际价值。

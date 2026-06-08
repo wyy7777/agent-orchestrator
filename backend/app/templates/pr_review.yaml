@@ -1,0 +1,35 @@
+# PR 自动审查工作流
+name: PR 自动审查
+description: 自动审查 Pull Request，输出质量报告和改进建议
+
+steps:
+  - name: 分析 PR
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## PR 描述
+      {issue}
+
+      ## 代码变更
+      {code}
+
+      请从以下维度审查这个 PR：
+      1. 代码质量和可维护性
+      2. 潜在的 Bug 和边界情况
+      3. 安全隐患
+      4. 性能影响
+      5. 测试覆盖
+
+  - name: 审查报告
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      基于分析结果，生成详细的代码审查报告。
+      包含：问题描述、影响范围、修复建议、优先级。
+
+      ## 分析结果
+      {changes}

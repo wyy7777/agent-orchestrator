@@ -7,16 +7,12 @@ import { EditOutlined, PlayCircleOutlined, ArrowLeftOutlined } from "@ant-design
 import { useRouter } from "next/router";
 import { workflowApi, taskApi } from "@/lib/api";
 import type { WorkflowItem, TaskItem } from "@/lib/api";
+import { statusColors } from "@/lib/constants";
 import dynamic from "next/dynamic";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 const { Title, Text } = Typography;
-
-const statusColors: Record<string, string> = {
-  pending: "default", running: "processing", paused: "warning",
-  completed: "success", failed: "error", rolled_back: "orange",
-};
 
 export default function WorkflowDetailPage() {
   const router = useRouter();

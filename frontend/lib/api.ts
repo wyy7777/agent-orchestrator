@@ -1,19 +1,30 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
+const REQUEST_TIMEOUT = 30000; // 30 秒
+
 async function request<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `����ʧ��: ${res.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      signal: controller.signal,
+      ...options,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `请求失败: ${res.status}`);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
 
 // === Workflow ===
@@ -175,4 +186,3 @@ export interface DashboardStatsData {
 export const dashboardApi = {
   stats: () => request<DashboardStatsData>("/api/dashboard/stats"),
 };
-

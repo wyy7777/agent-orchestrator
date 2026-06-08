@@ -18,19 +18,22 @@ def start(
     port: int = typer.Option(8000, help="监听端口"),
     db_path: str = typer.Option(None, help="数据库文件路径（默认 ~/.agent-orch/data.db）"),
     reload: bool = typer.Option(False, help="开发模式：代码变更自动重启"),
+    demo: bool = typer.Option(False, help="Demo 模式：自动创建示例工作流和任务"),
 ):
     """启动 Agent Orchestrator 服务"""
-    # 设置默认数据目录
+    import os
+
     if db_path is None:
         data_dir = Path.home() / ".agent-orch"
         data_dir.mkdir(exist_ok=True)
         db_path = str(data_dir / "data.db")
 
-    # 通过环境变量传递数据库路径
-    import os
     os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path}"
 
-    # 检查前端静态文件是否存在
+    if demo:
+        os.environ["DEMO_MODE"] = "true"
+        typer.echo("🎭 Demo 模式已启用 — 将自动创建示例数据")
+
     static_dir = Path(__file__).parent / "static"
     if not static_dir.exists():
         typer.echo("提示: 未找到前端静态文件，将以纯 API 模式启动")
@@ -54,7 +57,7 @@ def start(
 @app.command()
 def version():
     """显示版本信息"""
-    typer.echo("Agent Orchestrator v0.1.0")
+    typer.echo("Agent Orchestrator v0.2.0")
 
 
 @app.command()

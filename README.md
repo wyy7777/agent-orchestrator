@@ -4,6 +4,8 @@
 
 > 像 GitHub Actions 编排 CI/CD 一样，编排 AI Agent 的每一步执行。
 
+[English Documentation](./README_EN.md)
+
 ## 核心特性
 
 - **YAML 工作流定义** — 声明式定义多步骤 AI 工作流
@@ -12,6 +14,9 @@
 - **实时状态追踪** — WebSocket 实时推送任务状态变更
 - **Token 预算控制** — 每个任务独立 Token 上限，防止成本失控
 - **多 AI 模型支持** — DeepSeek / OpenAI / Claude 自由切换
+- **工作流模板库** — 5 个内置模板，快速上手
+- **Demo 模式** — `--demo` 参数零配置体验
+- **暗色模式** — 跟随系统偏好自动切换
 - **一键启动** — `pip install` 后一条命令启动完整服务（前端 + 后端）
 
 ## 快速开始
@@ -59,6 +64,7 @@ agent-orch start
 agent-orch start --port 9000          # 自定义端口
 agent-orch start --db-path ./data.db   # 自定义数据库路径
 agent-orch start --reload              # 开发模式（代码变更自动重启）
+agent-orch start --demo                # Demo 模式（自动创建示例数据）
 agent-orch init                        # 生成示例工作流文件
 agent-orch version                     # 查看版本
 ```

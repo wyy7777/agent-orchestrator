@@ -12,13 +12,9 @@ import { taskApi } from "@/lib/api";
 import type { TaskItem, StepExecution } from "@/lib/api";
 import TaskTimeline from "@/components/TaskTimeline";
 import { connectWebSocket, disconnectWebSocket, onMessage } from "@/lib/ws";
+import { statusColors } from "@/lib/constants";
 
 const { Title, Text, Paragraph } = Typography;
-
-const statusColors: Record<string, string> = {
-  pending: "default", running: "processing", paused: "warning",
-  completed: "success", failed: "error", rolled_back: "orange",
-};
 
 export default function TaskDetailPage() {
   const router = useRouter();

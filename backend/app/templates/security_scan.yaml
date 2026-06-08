@@ -1,0 +1,47 @@
+# 安全扫描工作流
+name: 安全扫描
+description: 扫描代码中的安全漏洞，生成安全报告
+
+steps:
+  - name: 安全分析
+    type: analyze
+    timeout: 180
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## 代码
+      {code}
+
+      请从安全角度分析这段代码，重点关注：
+      1. SQL 注入
+      2. XSS 漏洞
+      3. 路径穿越
+      4. 认证/授权缺陷
+      5. 敏感信息泄露
+      6. 依赖漏洞
+
+      输出格式（JSON）：
+      {
+        "vulnerabilities": [
+          {
+            "severity": "critical/high/medium/low",
+            "type": "漏洞类型",
+            "file": "文件路径",
+            "description": "描述",
+            "fix": "修复建议"
+          }
+        ],
+        "overall_risk": "high/medium/low",
+        "summary": "总结"
+      }
+
+  - name: 审查报告
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      基于安全分析结果，生成专业的安全审查报告。
+
+      ## 安全分析结果
+      {changes}

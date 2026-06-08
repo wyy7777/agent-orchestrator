@@ -10,13 +10,26 @@ function getWsUrl() {
 let ws: WebSocket | null = null;
 let handlers: MessageHandler[] = [];
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectDelay = 1000;
+let currentTaskId: string | undefined;
+let _connected = false;
+
+export function isConnected() {
+  return _connected;
+}
 
 export function connectWebSocket(taskId?: string) {
   if (ws && ws.readyState === WebSocket.OPEN) return;
+  currentTaskId = taskId;
 
   const WS_URL = getWsUrl();
   const url = taskId ? `${WS_URL}?task_id=${taskId}` : WS_URL;
   ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    _connected = true;
+    reconnectDelay = 1000; // 重置退避
+  };
 
   ws.onmessage = (event) => {
     try {
@@ -26,8 +39,13 @@ export function connectWebSocket(taskId?: string) {
   };
 
   ws.onclose = () => {
+    _connected = false;
     ws = null;
-    reconnectTimer = setTimeout(() => connectWebSocket(taskId), 3000);
+    // 指数退避重连，最大 30 秒
+    reconnectTimer = setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+      connectWebSocket(currentTaskId);
+    }, reconnectDelay);
   };
 
   ws.onerror = () => {
@@ -36,11 +54,14 @@ export function connectWebSocket(taskId?: string) {
 }
 
 export function disconnectWebSocket() {
+  currentTaskId = undefined;
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
   if (ws) {
     ws.close();
     ws = null;
   }
+  _connected = false;
 }
 
 export function onMessage(handler: MessageHandler) {

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+import functools
 from app.models.approval import Approval
 from app.models.step_execution import StepExecution
 from app.models.task import Task
@@ -68,6 +69,20 @@ class ExecutionEngine:
     def __init__(self, db: AsyncSession):
         self.db = db
         self._running_tasks: dict[str, asyncio.Task] = {}
+
+    async def recover_orphaned_tasks(self):
+        """启动时恢复：将所有 running 状态的任务标记为 failed。"""
+        result = await self.db.execute(
+            select(Task).where(Task.status == TaskStatus.RUNNING.value)
+        )
+        orphaned = result.scalars().all()
+        for task in orphaned:
+            task.status = TaskStatus.FAILED.value
+            task.error_message = "进程重启导致任务中断"
+            task.completed_at = datetime.now(timezone.utc)
+        if orphaned:
+            await self.db.commit()
+            logger.warning(f"已恢复 {len(orphaned)} 个孤儿任务")
 
     async def start_task(self, task_id: str) -> Task:
         """启动一个任务的执行。"""
@@ -217,10 +232,13 @@ class ExecutionEngine:
                     try:
                         handler = _step_handlers.get(step_def.type)
                         if handler is None:
-                            # 无处理器的步骤类型自动完成（如 merge）
                             output = {"status": "auto_completed"}
                         else:
-                            output = await handler().execute(step_def, context, db)
+                            step_timeout = step_def.timeout or settings.STEP_TIMEOUT_SECONDS
+                            output = await asyncio.wait_for(
+                                handler().execute(step_def, context, db),
+                                timeout=step_timeout,
+                            )
 
                         step_exec.status = StepStatus.COMPLETED.value
                         step_exec.output_data = output
@@ -240,6 +258,16 @@ class ExecutionEngine:
 
                         logger.info(f"步骤 '{step_exec.step_name}' 完成, tokens={tokens}")
 
+                    except asyncio.TimeoutError:
+                        step_exec.status = StepStatus.FAILED.value
+                        step_exec.error_message = f"步骤超时（>{step_def.timeout}s）"
+                        step_exec.completed_at = datetime.now(timezone.utc)
+                        task.status = TaskStatus.FAILED.value
+                        task.error_message = f"步骤 '{step_exec.step_name}' 超时"
+                        task.completed_at = datetime.now(timezone.utc)
+                        await db.commit()
+                        logger.error(f"步骤 '{step_exec.step_name}' 超时")
+                        return
                     except Exception as e:
                         step_exec.status = StepStatus.FAILED.value
                         step_exec.error_message = str(e)
@@ -260,7 +288,21 @@ class ExecutionEngine:
                 logger.info(f"任务 {task_id} 完成")
 
         except Exception as e:
-            logger.error(f"工作流执行异常: {e}")
+            logger.error(f"工作流执行异常: {e}", exc_info=True)
+            # 确保异常时任务状态正确更新
+            try:
+                async with async_session() as db:
+                    result = await db.execute(
+                        select(Task).where(Task.id == task_id)
+                    )
+                    task = result.scalar_one_or_none()
+                    if task and task.status == TaskStatus.RUNNING.value:
+                        task.status = TaskStatus.FAILED.value
+                        task.error_message = f"执行异常: {e}"
+                        task.completed_at = datetime.now(timezone.utc)
+                        await db.commit()
+            except Exception as inner_e:
+                logger.error(f"更新失败任务状态异常: {inner_e}")
         finally:
             self._running_tasks.pop(task_id, None)
 

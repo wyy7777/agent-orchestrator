@@ -10,7 +10,10 @@ from app.schemas.workflow import (
     WorkflowResponse,
     WorkflowUpdate,
 )
-from app.engine.yaml_parser import validate_workflow_yaml
+from app.engine.yaml_parser import validate_workflow_yaml, parse_workflow_yaml
+from app.models.step_execution import StepExecution
+from app.models.task import Task
+import yaml
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -88,6 +91,59 @@ async def delete_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
     if not workflow:
         raise HTTPException(status_code=404, detail="工作流不存在")
     await db.delete(workflow)
+
+
+# === 工作流模板 ===
+
+import os
+from pathlib import Path
+
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+
+
+def _load_templates() -> list[dict]:
+    """加载所有内置模板。"""
+    templates = []
+    if not TEMPLATES_DIR.exists():
+        return templates
+    for f in sorted(TEMPLATES_DIR.glob("*.yaml")):
+        try:
+            content = f.read_text(encoding="utf-8")
+            data = yaml.safe_load(content)
+            if data and isinstance(data, dict):
+                templates.append({
+                    "name": data.get("name", f.stem),
+                    "description": data.get("description", ""),
+                    "yaml_definition": content,
+                })
+        except Exception:
+            continue
+    return templates
+
+
+@router.get("/templates")
+async def list_templates():
+    """获取所有内置工作流模板。"""
+    return _load_templates()
+
+
+@router.post("/templates/{index}", response_model=WorkflowResponse, status_code=201)
+async def import_template(index: int, db: AsyncSession = Depends(get_db)):
+    """从模板库导入一个工作流。"""
+    templates = _load_templates()
+    if index < 0 or index >= len(templates):
+        raise HTTPException(status_code=404, detail="模板不存在")
+
+    tpl = templates[index]
+    workflow = Workflow(
+        name=tpl["name"],
+        description=tpl["description"],
+        yaml_definition=tpl["yaml_definition"],
+    )
+    db.add(workflow)
+    await db.flush()
+    await db.refresh(workflow)
+    return workflow
 
 
 @router.post("/validate")

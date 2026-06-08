@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Layout as AntLayout, Menu, Typography, theme } from "antd";
+import { Layout as AntLayout, Menu, Typography, theme, Button, Tooltip } from "antd";
 import {
   DashboardOutlined,
   BranchesOutlined,
@@ -8,6 +8,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   RocketOutlined,
+  BulbOutlined,
+  BulbFilled,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 
@@ -20,7 +22,13 @@ const menuItems = [
   { key: "/approvals", icon: <CheckCircleOutlined />, label: "审批" },
 ];
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+interface AppLayoutProps {
+  children: React.ReactNode;
+  darkMode?: boolean;
+  toggleDark?: () => void;
+}
+
+export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutProps) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
@@ -67,19 +75,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             background: colorBgContainer,
             display: "flex",
             alignItems: "center",
-            borderBottom: "1px solid #f0f0f0",
+            justifyContent: "space-between",
+            borderBottom: "1px solid rgba(128,128,128,0.15)",
           }}
         >
-          {React.createElement(
-            collapsed ? MenuUnfoldOutlined : MenuFoldOutlined,
-            {
-              style: { fontSize: 18, cursor: "pointer" },
-              onClick: () => setCollapsed(!collapsed),
-            }
+          <div style={{ display: "flex", alignItems: "center" }}>
+            {React.createElement(
+              collapsed ? MenuUnfoldOutlined : MenuFoldOutlined,
+              {
+                style: { fontSize: 18, cursor: "pointer" },
+                onClick: () => setCollapsed(!collapsed),
+              }
+            )}
+            <Typography.Title level={4} style={{ margin: "0 0 0 16px" }}>
+              {menuItems.find((m) => m.key === router.pathname)?.label || "Agent Orchestrator"}
+            </Typography.Title>
+          </div>
+          {toggleDark && (
+            <Tooltip title={darkMode ? "切换亮色模式" : "切换暗色模式"}>
+              <Button
+                type="text"
+                icon={darkMode ? <BulbFilled style={{ color: "#faad14" }} /> : <BulbOutlined />}
+                onClick={toggleDark}
+              />
+            </Tooltip>
           )}
-          <Typography.Title level={4} style={{ margin: "0 0 0 16px" }}>
-            {menuItems.find((m) => m.key === router.pathname)?.label || "Agent Orchestrator"}
-          </Typography.Title>
         </Header>
         <Content
           style={{

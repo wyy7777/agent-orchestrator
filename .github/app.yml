@@ -1,0 +1,23 @@
+# GitHub App Manifest
+# 通过 https://github.com/settings/apps/new 安装时使用
+# 在 URL 后加 ?state=xxx&manifest=xxx 触发
+# 详见 https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest
+
+name: FlowOrch
+description: "AI Agent 工作流编排 — 让 AI 写代码，你来审批"
+url: "https://github.com/reasonix/agent-orchestrator"
+hook_attributes:
+  url: ""
+redirect_url: "http://localhost:3000/callback"
+public: true
+default_events:
+  - issues
+  - issue_comment
+  - pull_request
+  - pull_request_review
+default_permissions:
+  issues: write
+  pull_requests: write
+  contents: write
+  metadata: read
+  checks: read
