@@ -91,7 +91,9 @@ async def start_task(task_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{task_id}/rollback", response_model=TaskResponse)
 async def rollback_task(
-    task_id: str, target_step_index: int = 0, db: AsyncSession = Depends(get_db)
+    task_id: str,
+    target_step_index: int | None = None,
+    db: AsyncSession = Depends(get_db),
 ):
     engine = ExecutionEngine(db)
     try:
