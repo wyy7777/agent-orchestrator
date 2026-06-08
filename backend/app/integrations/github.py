@@ -4,7 +4,7 @@ import asyncio
 import base64
 import logging
 import re
-from datetime import datetime
+from typing import Any
 
 import httpx
 
@@ -48,12 +48,15 @@ def _parse_repo(git_repo: str) -> tuple[str, str]:
     return parts[-2], parts[-1]
 
 
+# 兼容旧代码的别名
+parse_repo_url = _parse_repo
+
+
 def _validate_file_path(file_path: str) -> str:
     """校验文件路径，防止路径穿越。"""
     if not file_path or ".." in file_path or file_path.startswith("/"):
         raise ValueError(f"不安全的文件路径: {file_path}")
-    # 只允许字母数字、下划线、横杠、点、斜杠
-    if not re.match(r'^[a-zA-Z0-9_-./]+$', file_path):
+    if not re.match(r'^[a-zA-Z0-9_\-./]+$', file_path):
         raise ValueError(f"文件路径包含非法字符: {file_path}")
     if len(file_path) > 256:
         raise ValueError(f"文件路径过长: {len(file_path)} > 256")
@@ -69,6 +72,7 @@ async def _retry_request(method: str, url: str, max_retries: int = 3, **kwargs) 
             resp = await client.request(method, url, **kwargs)
             if resp.status_code == 403 and "rate limit" in resp.text.lower():
                 reset_time = int(resp.headers.get("X-RateLimit-Reset", 0))
+                from datetime import datetime
                 wait = max(min(reset_time - int(datetime.now().timestamp()), 60), 5)
                 logger.warning(f"GitHub API 限流，等待 {wait}s")
                 await asyncio.sleep(wait)
@@ -115,6 +119,16 @@ async def create_branch(owner: str, repo: str, branch_name: str, base_branch: st
     return resp.json()["ref"]
 
 
+async def get_file(owner: str, repo: str, file_path: str, ref: str = "main") -> dict:
+    """获取文件信息。"""
+    resp = await _retry_request(
+        "GET",
+        f"{GITHUB_API}/repos/{owner}/{repo}/contents/{file_path}",
+        params={"ref": ref},
+    )
+    return resp.json()
+
+
 async def write_file(
     owner: str,
     repo: str,
@@ -126,16 +140,10 @@ async def write_file(
     """写入或更新文件到指定分支。"""
     file_path = _validate_file_path(file_path)
 
-    client = _get_client()
     sha = None
     try:
-        existing = await client.get(
-            f"{GITHUB_API}/repos/{owner}/{repo}/contents/{file_path}",
-            headers=_headers(),
-            params={"ref": branch},
-        )
-        if existing.status_code == 200:
-            sha = existing.json().get("sha")
+        existing = await get_file(owner, repo, file_path, ref=branch)
+        sha = existing.get("sha")
     except Exception:
         pass
 
@@ -177,3 +185,41 @@ async def create_pr(
     pr_url = resp.json()["html_url"]
     logger.info(f"PR 已创建: {pr_url}")
     return resp.json()
+
+
+class GitHubClient:
+    """GitHub API 客户端封装类，兼容旧代码。"""
+
+    def __init__(self, token: str | None = None):
+        self.token = token or settings.GITHUB_TOKEN
+
+    async def get_repo(self, owner: str, repo: str) -> dict:
+        resp = await _retry_request("GET", f"{GITHUB_API}/repos/{owner}/{repo}")
+        return resp.json()
+
+    async def get_branch(self, owner: str, repo: str, branch: str) -> dict:
+        resp = await _retry_request("GET", f"{GITHUB_API}/repos/{owner}/{repo}/branches/{branch}")
+        return resp.json()
+
+    async def create_branch(self, owner: str, repo: str, branch: str, sha: str) -> dict:
+        resp = await _retry_request(
+            "POST",
+            f"{GITHUB_API}/repos/{owner}/{repo}/git/refs",
+            json={"ref": f"refs/heads/{branch}", "sha": sha},
+        )
+        return resp.json()
+
+    async def get_file(self, owner: str, repo: str, path: str, ref: str = "main") -> dict:
+        return await get_file(owner, repo, path, ref)
+
+    async def create_or_update_file(
+        self, owner: str, repo: str, path: str, content: str,
+        message: str, branch: str, sha: str | None = None,
+    ) -> dict:
+        return await write_file(owner, repo, branch, path, content, message)
+
+    async def create_pull_request(
+        self, owner: str, repo: str, title: str,
+        head: str, base: str, body: str = "",
+    ) -> dict:
+        return await create_pr(owner, repo, head, base, title, body)

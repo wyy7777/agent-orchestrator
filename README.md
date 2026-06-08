@@ -24,7 +24,7 @@
 ### 安装
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/agent-orchestrator.git
+git clone https://github.com/wyy7777/agent-orchestrator.git
 cd agent-orchestrator/backend
 pip install -e .
 ```
