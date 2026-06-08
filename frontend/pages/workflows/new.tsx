@@ -17,7 +17,7 @@ steps:
     type: analyze
     timeout: 120
     config:
-      provider: claude
+      provider: deepseek
 
   - name: review_plan
     type: approval
@@ -27,13 +27,13 @@ steps:
     type: execute
     timeout: 300
     config:
-      provider: claude
+      provider: deepseek
 
   - name: review_code
     type: review
     timeout: 120
     config:
-      provider: claude
+      provider: deepseek
 
   - name: final_approval
     type: approval
@@ -62,8 +62,8 @@ export default function NewWorkflowPage() {
       message.success("工作流创建成功");
       router.push("/workflows");
     } catch (err: unknown) {
-      if ((err as { errorFields?: unknown[] }).errorFields) return; // form validation
-      message.error((err as Error).message || "创建失败");
+      if ((err as { errorFields?: unknown[] }).errorFields) return;
+      message.error((err as Error).message || "保存失败");
     } finally {
       setSaving(false);
     }
@@ -78,12 +78,12 @@ export default function NewWorkflowPage() {
           <Form.Item
             name="name"
             label="工作流名称"
-            rules={[{ required: true, message: "请输入名称" }]}
+            rules={[{ required: true, message: "请输入工作流名称" }]}
           >
-            <Input placeholder="例：GitHub Issue 自动修复" />
+            <Input placeholder="例如：GitHub Issue 自动修复" />
           </Form.Item>
           <Form.Item name="description" label="描述">
-            <TextArea rows={2} placeholder="可选：描述这个工作流的用途" />
+            <TextArea rows={2} placeholder="可选：描述此工作流的用途" />
           </Form.Item>
         </Form>
       </Card>
