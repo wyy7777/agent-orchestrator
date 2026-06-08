@@ -42,3 +42,10 @@ backend/static/
 backend/dist/
 backend/build/
 desktop-tauri/src-tauri/binaries/
+*.exe
+*.msi
+*.spec
+release/
+
+# 安装产物（防止误提交）
+"Agent Orchestrator/"
