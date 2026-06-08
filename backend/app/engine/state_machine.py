@@ -92,6 +92,22 @@ class ExecutionEngine:
                 )
                 self.db.add(step_exec)
 
+        # 如果配置了 GitHub 仓库，创建沙箱分支
+        if task.git_repo and settings.GITHUB_TOKEN and not task.sandbox_branch:
+            try:
+                from app.integrations.github import _parse_repo, create_branch, get_default_branch
+
+                owner, repo = _parse_repo(task.git_repo)
+                base_branch = task.git_branch or await get_default_branch(owner, repo)
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+                branch_name = f"agent-fix/{timestamp}"
+                await create_branch(owner, repo, branch_name, base_branch)
+                task.sandbox_branch = branch_name
+                task.git_branch = task.git_branch or base_branch
+                logger.info(f"沙箱分支 {branch_name} 已创建")
+            except Exception as e:
+                logger.warning(f"创建沙箱分支失败: {e}")
+
         task.status = TaskStatus.RUNNING.value
         task.started_at = datetime.now(timezone.utc)
         task.current_step_index = 0
@@ -161,6 +177,7 @@ class ExecutionEngine:
                     "trigger_payload": task.trigger_payload or {},
                     "git_repo": task.git_repo,
                     "git_branch": task.git_branch,
+                    "sandbox_branch": task.sandbox_branch,
                     "results": {},
                 }
 
@@ -215,6 +232,12 @@ class ExecutionEngine:
                         step_exec.token_usage = {"tokens": tokens}
 
                         context["results"][step_exec.step_name] = output
+
+                        # merge 步骤完成后，记录 PR URL
+                        if step_def.type == "merge" and output.get("pr_url"):
+                            task.pr_url = output["pr_url"]
+                            logger.info(f"PR 已创建: {task.pr_url}")
+
                         logger.info(f"步骤 '{step_exec.step_name}' 完成, tokens={tokens}")
 
                     except Exception as e:

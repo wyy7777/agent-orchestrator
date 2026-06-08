@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 from contextlib import asynccontextmanager
@@ -17,8 +18,8 @@ import app.agents.executor  # noqa: F401
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 前端静态文件目录（打包后位于 backend/static）
-STATIC_DIR = Path(__file__).parent.parent / "static"
+# 前端静态文件目录：优先读环境变量，否则相对路径（兼容开发和打包）
+STATIC_DIR = Path(os.environ.get("AGENT_ORCH_STATIC_DIR", "")) if os.environ.get("AGENT_ORCH_STATIC_DIR") else Path(__file__).parent.parent / "static"
 
 
 @asynccontextmanager
