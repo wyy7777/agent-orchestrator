@@ -5,7 +5,7 @@ import {
 } from "antd";
 import {
   ArrowLeftOutlined, RollbackOutlined, ReloadOutlined,
-  PlayCircleOutlined, PauseCircleOutlined,
+  PlayCircleOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { taskApi } from "@/lib/api";
@@ -87,9 +87,8 @@ export default function TaskDetailPage() {
   if (loading) return <Spin size="large" />;
   if (!task) return <Text>任务不存在</Text>;
 
-  const isRunning = task.status === "running";
   const isPaused = task.status === "paused";
-  const canRollback = ["running", "paused", "failed"].includes(task.status);
+  const canRollback = ["running", "paused", "failed", "completed"].includes(task.status);
 
   return (
     <div>
@@ -233,7 +232,7 @@ export default function TaskDetailPage() {
         okButtonProps={{ danger: true }}
       >
         <Space direction="vertical" style={{ width: "100%" }}>
-          <Text>选择要回滚到的步骤索引（从 0 开始）：</Text>
+          <Text>选择要回滚到的步骤（从 0 开始）</Text>
           <InputNumber
             min={0}
             max={task.step_executions.length - 1}
