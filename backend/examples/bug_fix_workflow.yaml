@@ -1,0 +1,46 @@
+# GitHub Issue 自动修复工作流
+name: GitHub Issue Auto Fix
+description: 自动分析 GitHub Issue，生成修复方案，创建 PR
+
+steps:
+  - name: analyze
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## Issue 信息
+      {issue}
+
+      ## 相关代码
+      {code}
+
+      请分析这个问题并输出修复方案。
+
+  - name: review_plan
+    type: approval
+    timeout: 3600
+
+  - name: execute
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+
+  - name: review_code
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek
+
+  - name: final_approval
+    type: approval
+    timeout: 3600
+
+  - name: create_pr
+    type: merge
+    timeout: 60
+
+settings:
+  max_tokens: 500000
+  auto_merge: false

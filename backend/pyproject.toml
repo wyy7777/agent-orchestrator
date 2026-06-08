@@ -1,0 +1,52 @@
+[project]
+name = "agent-orchestrator"
+version = "0.1.0"
+description = "企业级 AI Agent 工作流编排平台"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "aiosqlite>=0.20.0",
+    "alembic>=1.14.0",
+    "pyyaml>=6.0.0",
+    "httpx>=0.28.0",
+    "anthropic>=0.40.0",
+    "openai>=1.50.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "websockets>=14.0",
+    "aiofiles>=24.0.0",
+    "typer>=0.15.0",
+    "rich>=14.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.0",
+    "ruff>=0.8.0",
+]
+
+[project.scripts]
+agent-orch = "cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+"app" = ["**/*.yaml", "**/*.yml"]
+"*" = ["static/**/*"]

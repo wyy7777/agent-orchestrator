@@ -1,0 +1,27 @@
+# PR 自动审查工作流
+name: PR Auto Review
+description: 自动审查 Pull Request 的代码质量
+
+steps:
+  - name: analyze_pr
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## PR 描述
+      {issue}
+
+      ## 代码变更
+      {code}
+
+      请审查这个 PR 的代码变更。
+
+  - name: review_result
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek
+
+settings:
+  max_tokens: 200000
