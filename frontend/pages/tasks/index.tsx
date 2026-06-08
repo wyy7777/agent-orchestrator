@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Typography, Table, Tag, Button, message, Space, Select, Card } from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { Typography, Table, Tag, Button, message, Space, Select, Empty } from "antd";
+import { ReloadOutlined, RocketOutlined } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { taskApi, workflowApi } from "@/lib/api";
 import type { TaskItem, WorkflowItem } from "@/lib/api";
@@ -47,7 +47,7 @@ export default function TaskListPage() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
-        <Title level={3}>任务管理</Title>
+        <Title level={3}>任务列表</Title>
         <Space>
           <Select
             placeholder="筛选状态"
@@ -69,6 +69,17 @@ export default function TaskListPage() {
         </Space>
       </div>
 
+      {tasks.length === 0 && !loading ? (
+        <Empty description="还没有任务">
+          <Button
+            type="primary"
+            icon={<RocketOutlined />}
+            onClick={() => router.push("/workflows")}
+          >
+            去创建任务
+          </Button>
+        </Empty>
+      ) : (
       <Table
         dataSource={tasks}
         rowKey="id"
@@ -128,6 +139,7 @@ export default function TaskListPage() {
           },
         ]}
       />
+      )}
     </div>
   );
 }
