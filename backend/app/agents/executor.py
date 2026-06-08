@@ -166,3 +166,105 @@ class ReviewHandler(StepHandler):
             "tokens_used": response.tokens_used,
             "model": response.model,
         }
+
+
+@register_handler("merge")
+class MergeHandler(StepHandler):
+    """合并步骤：将代码改动提交到 GitHub 并创建 PR。"""
+
+    async def execute(
+        self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
+        from app.integrations.github import GitHubClient, parse_repo_url
+
+        git_repo = context.get("git_repo", "")
+        git_branch = context.get("git_branch", "main")
+
+        if not git_repo:
+            raise ValueError("merge 步骤需要设置 git_repo 参数")
+
+        owner, repo = parse_repo_url(git_repo)
+        client = GitHubClient()
+
+        # 获取 execute 步骤的改动
+        execute_result = context.get("results", {}).get("execute", {})
+        changes_data = execute_result.get("changes", {})
+        changes = changes_data.get("changes", []) if isinstance(changes_data, dict) else []
+
+        # 生成 PR 分支名
+        task_id = context.get("task_id", "unknown")[:8]
+        pr_branch = f"agent-orch/{task_id}"
+
+        # 获取 main 分支的 SHA
+        main_branch = await client.get_branch(owner, repo, git_branch)
+        main_sha = main_branch["commit"]["sha"]
+
+        # 创建新分支
+        await client.create_branch(owner, repo, pr_branch, main_sha)
+
+        # 提交每个文件的改动
+        committed_files = []
+        for change in changes:
+            file_path = change.get("file", "")
+            content = change.get("content", "")
+            action = change.get("action", "modify")
+
+            if not file_path or action == "delete":
+                continue
+
+            # 获取文件当前 SHA（如果存在）
+            file_sha = None
+            try:
+                existing = await client.get_file(owner, repo, file_path, ref=pr_branch)
+                file_sha = existing.get("sha")
+            except RuntimeError:
+                pass  # 文件不存在，创建新文件
+
+            await client.create_or_update_file(
+                owner=owner,
+                repo=repo,
+                path=file_path,
+                content=content,
+                message=f"[Agent Orchestrator] {change.get('explanation', f'Update {file_path}')}",
+                branch=pr_branch,
+                sha=file_sha,
+            )
+            committed_files.append(file_path)
+
+        # 创建 PR
+        # 汇总分析结果作为 PR body
+        analysis = context.get("results", {}).get("analyze", {}).get("analysis", {})
+        review = context.get("results", {}).get("review", {}).get("review", {})
+
+        pr_body_parts = ["## 🤖 由 Agent Orchestrator 自动生成\n"]
+        if isinstance(analysis, dict):
+            pr_body_parts.append(f"### 分析\n{analysis.get('analysis', '')}")
+            pr_body_parts.append(f"### 根因\n{analysis.get('root_cause', '')}")
+            pr_body_parts.append(f"### 方案\n{analysis.get('solution', '')}")
+        if isinstance(review, dict):
+            pr_body_parts.append(f"### 审查结果\n{review.get('summary', '')}")
+            score = review.get("score", "")
+            if score:
+                pr_body_parts.append(f"**评分**: {score}/100")
+
+        pr_body = "\n\n".join(pr_body_parts)
+        pr_title = f"[Agent] {context.get('task_id', 'Task')[:8]}: 自动修复"
+
+        pr = await client.create_pull_request(
+            owner=owner,
+            repo=repo,
+            title=pr_title,
+            head=pr_branch,
+            base=git_branch,
+            body=pr_body,
+        )
+
+        pr_url = pr["html_url"]
+        logger.info(f"PR 已创建: {pr_url}")
+
+        return {
+            "pr_url": pr_url,
+            "pr_number": pr["number"],
+            "pr_branch": pr_branch,
+            "committed_files": committed_files,
+        }
