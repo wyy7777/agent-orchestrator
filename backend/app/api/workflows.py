@@ -35,6 +35,11 @@ async def create_workflow(body: WorkflowCreate, db: AsyncSession = Depends(get_d
     if not valid:
         raise HTTPException(status_code=400, detail=f"YAML 格式错误: {error}")
 
+    # 检查名称是否重复
+    existing = await db.execute(select(Workflow).where(Workflow.name == body.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail=f"工作流名称 '{body.name}' 已存在")
+
     workflow = Workflow(
         name=body.name,
         description=body.description,
@@ -91,6 +96,7 @@ async def delete_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/validate")
-async def validate_yaml(yaml_content: str):
+async def validate_yaml(body: dict):
+    yaml_content = body.get("yaml_content", "")
     valid, error = validate_workflow_yaml(yaml_content)
     return {"valid": valid, "error": error}
