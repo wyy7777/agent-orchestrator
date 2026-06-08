@@ -118,9 +118,13 @@ class ExecutionEngine:
 
         return task
 
-    async def rollback_task(self, task_id: str, target_step_index: int) -> Task:
-        """回滚任务到指定步骤。"""
+    async def rollback_task(self, task_id: str, target_step_index: int | None) -> Task:
+        """回滚任务到指定步骤。默认回退到上一步。"""
         task = await self._load_task(task_id)
+
+        if target_step_index is None:
+            # 默认回退到上一步
+            target_step_index = max(0, task.current_step_index - 1)
 
         if target_step_index < 0 or target_step_index >= len(task.step_executions):
             raise ValueError(f"无效的步骤索引: {target_step_index}")
