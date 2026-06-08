@@ -10,7 +10,7 @@ async function request<T>(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `请求失败: ${res.status}`);
+    throw new Error(err.detail || `����ʧ��: ${res.status}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -53,6 +53,12 @@ export const workflowApi = {
       method: "POST",
       body: JSON.stringify({ yaml_content }),
     }),
+  templates: () =>
+    request<Array<{ name: string; description: string; yaml_definition: string }>>(
+      "/api/workflows/templates"
+    ),
+  importTemplate: (index: number) =>
+    request<WorkflowItem>(`/api/workflows/templates/${index}`, { method: "POST" }),
 };
 
 // === Task ===
@@ -169,3 +175,4 @@ export interface DashboardStatsData {
 export const dashboardApi = {
   stats: () => request<DashboardStatsData>("/api/dashboard/stats"),
 };
+
