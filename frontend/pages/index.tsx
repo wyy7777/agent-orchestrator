@@ -1,31 +1,56 @@
-import React, { useEffect, useState } from "react";
-import { Typography, Spin, message, Card, Table, Tag, Button, Space, Empty } from "antd";
-import { PlusOutlined, ReloadOutlined, RocketOutlined } from "@ant-design/icons";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { Typography, Spin, message, Card, Table, Tag, Button, Space, Row, Col, Empty } from "antd";
+import {
+  PlusOutlined,
+  ReloadOutlined,
+  RocketOutlined,
+  DownloadOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  LoadingOutlined,
+  AuditOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
 import { useRouter } from "next/router";
+import { Line, Pie, Column } from "@ant-design/charts";
 import DashboardStats from "@/components/DashboardStats";
 import { dashboardApi, taskApi, workflowApi } from "@/lib/api";
 import type { DashboardStatsData, TaskItem, WorkflowItem } from "@/lib/api";
 import { statusColors } from "@/lib/constants";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title } = Typography;
+
+/** 最近 N 天的日期标签 */
+function recentDays(n: number): string[] {
+  const days: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStatsData | null>(null);
   const [recentTasks, setRecentTasks] = useState<TaskItem[]>([]);
   const [workflows, setWorkflows] = useState<Record<string, WorkflowItem>>({});
+  const [allTasks, setAllTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsData, tasksData, wfData] = await Promise.all([
+      const [statsData, tasksData, wfData, allTasksData] = await Promise.all([
         dashboardApi.stats(),
-        taskApi.list({ limit: 10 }),
+        taskApi.list({ page_size: 10 }),
         workflowApi.list(0, 100),
+        taskApi.list({ page_size: 200 }),
       ]);
       setStats(statsData);
       setRecentTasks(tasksData.items);
+      setAllTasks(allTasksData.items);
 
       const wfMap: Record<string, WorkflowItem> = {};
       wfData.items.forEach((w) => (wfMap[w.id] = w));
@@ -41,18 +66,184 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
+  // ---- 图表数据计算 ----
+
+  /** 最近 7 天任务趋势 */
+  const trendData = useMemo(() => {
+    const days = recentDays(7);
+    const dayMap: Record<string, number> = {};
+    days.forEach((d) => (dayMap[d] = 0));
+    allTasks.forEach((t) => {
+      const day = t.created_at.slice(0, 10);
+      if (day in dayMap) dayMap[day]++;
+    });
+    return days.map((d) => ({ date: d.slice(5), count: dayMap[d] }));
+  }, [allTasks]);
+
+  /** 成功率饼图 */
+  const pieData = useMemo(() => {
+    if (!stats) return [];
+    return [
+      { type: "已完成", value: stats.completed_tasks },
+      { type: "失败", value: stats.failed_tasks },
+      { type: "运行中", value: stats.running_tasks },
+      { type: "其他", value: Math.max(0, stats.total_tasks - stats.completed_tasks - stats.failed_tasks - stats.running_tasks) },
+    ].filter((d) => d.value > 0);
+  }, [stats]);
+
+  /** Token 消耗柱状图（按工作流聚合） */
+  const tokenBarData = useMemo(() => {
+    const wfTokens: Record<string, number> = {};
+    allTasks.forEach((t) => {
+      const name = workflows[t.workflow_id]?.name || t.workflow_id.slice(0, 8);
+      wfTokens[name] = (wfTokens[name] || 0) + t.total_tokens_used;
+    });
+    return Object.entries(wfTokens)
+      .map(([workflow, tokens]) => ({ workflow, tokens }))
+      .sort((a, b) => b.tokens - a.tokens)
+      .slice(0, 8);
+  }, [allTasks, workflows]);
+
+  /** 热门工作流 TOP 5 */
+  const topWorkflows = useMemo(() => {
+    const wfCount: Record<string, { name: string; count: number }> = {};
+    allTasks.forEach((t) => {
+      const wfId = t.workflow_id;
+      if (!wfCount[wfId]) {
+        wfCount[wfId] = { name: workflows[wfId]?.name || wfId.slice(0, 8), count: 0 };
+      }
+      wfCount[wfId].count++;
+    });
+    return Object.values(wfCount)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [allTasks, workflows]);
+
+  // ---- 导出 CSV ----
+  const exportCSV = useCallback(() => {
+    if (allTasks.length === 0) {
+      message.warning("没有可导出的数据");
+      return;
+    }
+    const header = "任务ID,工作流,状态,Token消耗,触发方式,创建时间\n";
+    const rows = allTasks
+      .map(
+        (t) =>
+          `${t.id},${workflows[t.workflow_id]?.name || ""},${t.status},${t.total_tokens_used},${t.trigger_type || "手动"},${t.created_at}`
+      )
+      .join("\n");
+    const blob = new Blob(["﻿" + header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tasks_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    message.success("导出成功");
+  }, [allTasks, workflows]);
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
         <Title level={3}>仪表盘</Title>
-        <Button icon={<ReloadOutlined />} onClick={loadData}>
-          刷新
-        </Button>
+        <Space>
+          <Button icon={<DownloadOutlined />} onClick={exportCSV}>
+            导出 CSV
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={loadData}>
+            刷新
+          </Button>
+        </Space>
       </div>
 
       <Spin spinning={loading}>
+        {/* 基础统计卡片 */}
         <DashboardStats stats={stats} />
 
+        {/* 图表区域 */}
+        <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
+          {/* 任务趋势折线图 */}
+          <Col xs={24} lg={12}>
+            <Card title="任务趋势（最近 7 天）">
+              <Line
+                data={trendData}
+                xField="date"
+                yField="count"
+                point={{ size: 4 }}
+                smooth
+                height={260}
+                yAxis={{ min: 0 }}
+              />
+            </Card>
+          </Col>
+
+          {/* 成功率饼图 */}
+          <Col xs={24} lg={12}>
+            <Card title="任务状态分布">
+              <Pie
+                data={pieData}
+                angleField="value"
+                colorField="type"
+                radius={0.85}
+                innerRadius={0.55}
+                height={260}
+                label={{ text: "type", position: "outside" }}
+                legend={{ position: "bottom" }}
+                style={{ stroke: "#fff", lineWidth: 2 }}
+                color={["#52c41a", "#ff4d4f", "#1677ff", "#d9d9d9"]}
+              />
+            </Card>
+          </Col>
+
+          {/* Token 消耗柱状图 */}
+          <Col xs={24} lg={12}>
+            <Card title="Token 消耗（按工作流）">
+              {tokenBarData.length === 0 ? (
+                <div style={{ height: 260, display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}>
+                  暂无数据
+                </div>
+              ) : (
+                <Column
+                  data={tokenBarData}
+                  xField="workflow"
+                  yField="tokens"
+                  height={260}
+                  color="#1677ff"
+                  label={{ position: "top", formatter: (v: { tokens: number }) => v.tokens.toLocaleString() }}
+                  xAxis={{ label: { autoRotate: true } }}
+                />
+              )}
+            </Card>
+          </Col>
+
+          {/* 热门工作流 TOP 5 */}
+          <Col xs={24} lg={12}>
+            <Card title="热门工作流 TOP 5">
+              <Table
+                dataSource={topWorkflows}
+                rowKey="name"
+                pagination={false}
+                size="small"
+                columns={[
+                  {
+                    title: "排名",
+                    render: (_: unknown, __: unknown, index: number) => index + 1,
+                    width: 60,
+                  },
+                  { title: "工作流名称", dataIndex: "name" },
+                  {
+                    title: "执行次数",
+                    dataIndex: "count",
+                    sorter: (a: { count: number }, b: { count: number }) => a.count - b.count,
+                    defaultSortOrder: "descend" as const,
+                  },
+                ]}
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        {/* 最近任务 */}
         <Card
           title="最近任务"
           style={{ marginTop: 24 }}
@@ -78,57 +269,56 @@ export default function DashboardPage() {
             </Empty>
           ) : (
             <Table
-            dataSource={recentTasks}
-            rowKey="id"
-            pagination={false}
-            size="small"
-            columns={[
-              {
-                title: "任务 ID",
-                dataIndex: "id",
-                render: (id: string) => (
-                  <Button
-                    type="link"
-                    size="small"
-                    onClick={() => router.push(`/tasks/detail?id=${id}`)}
-                  >
-                    {id.substring(0, 8)}...
-                  </Button>
-                ),
-              },
-              {
-                title: "工作流",
-                dataIndex: "workflow_id",
-                render: (wfId: string) => workflows[wfId]?.name || wfId.substring(0, 8),
-              },
-              {
-                title: "状态",
-                dataIndex: "status",
-                render: (status: string) => (
-                  <Tag color={statusColors[status]}>{status}</Tag>
-                ),
-              },
-              {
-                title: "Token",
-                dataIndex: "total_tokens_used",
-                render: (v: number) => v.toLocaleString(),
-              },
-              {
-                title: "触发方式",
-                dataIndex: "trigger_type",
-                render: (v: string) => v || "手动",
-              },
-              {
-                title: "创建时间",
-                dataIndex: "created_at",
-                render: (v: string) => new Date(v).toLocaleString("zh-CN"),
-              },
-            ]}
-          />
+              dataSource={recentTasks}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              columns={[
+                {
+                  title: "任务 ID",
+                  dataIndex: "id",
+                  render: (id: string) => (
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={() => router.push(`/tasks/detail?id=${id}`)}
+                    >
+                      {id.substring(0, 8)}...
+                    </Button>
+                  ),
+                },
+                {
+                  title: "工作流",
+                  dataIndex: "workflow_id",
+                  render: (wfId: string) => workflows[wfId]?.name || wfId.substring(0, 8),
+                },
+                {
+                  title: "状态",
+                  dataIndex: "status",
+                  render: (status: string) => (
+                    <Tag color={statusColors[status]}>{status}</Tag>
+                  ),
+                },
+                {
+                  title: "Token",
+                  dataIndex: "total_tokens_used",
+                  render: (v: number) => v.toLocaleString(),
+                },
+                {
+                  title: "触发方式",
+                  dataIndex: "trigger_type",
+                  render: (v: string) => v || "手动",
+                },
+                {
+                  title: "创建时间",
+                  dataIndex: "created_at",
+                  render: (v: string) => new Date(v).toLocaleString("zh-CN"),
+                },
+              ]}
+            />
           )}
         </Card>
       </Spin>
     </div>
   );
 }
-

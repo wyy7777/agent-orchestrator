@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import settings
 from app.database import init_db
-from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications
+from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications, plugins
 from app.services.ws_manager import ws_manager
 from app.services.scheduler import scheduler
 
@@ -96,6 +96,7 @@ app.include_router(dashboard.router)
 app.include_router(webhooks.router)
 app.include_router(schedules.router)
 app.include_router(notifications.router)
+app.include_router(plugins.router)
 
 
 # 简单的内存 Rate Limiter（每 IP 每分钟 60 次请求）

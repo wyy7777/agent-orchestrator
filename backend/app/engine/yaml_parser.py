@@ -9,10 +9,16 @@ import yaml
 @dataclass
 class StepDefinition:
     name: str
-    type: str  # analyze / execute / review / approval / merge
+    type: str  # analyze / execute / review / approval / merge / subtask / loop
     config: dict[str, Any] = field(default_factory=dict)
     prompt_template: str | None = None
     timeout: int = 300  # 秒
+    parallel: bool = False
+    steps: list["StepDefinition"] = field(default_factory=list)  # loop 子步骤
+    condition: str | None = None  # 条件表达式，如 "{result.score} > 80"
+    loop_items: str | None = None  # 循环数据源 key
+    max_iterations: int = 10
+    subtask_workflow: str | None = None  # 子工作流 ID
 
 
 @dataclass
@@ -23,7 +29,7 @@ class WorkflowDefinition:
     settings: dict[str, Any] = field(default_factory=dict)
 
 
-VALID_STEP_TYPES = {"analyze", "execute", "review", "approval", "merge", "script"}
+VALID_STEP_TYPES = {"analyze", "execute", "review", "approval", "merge", "script", "subtask", "loop"}
 
 
 def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
@@ -59,6 +65,30 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                 f"支持的类型: {', '.join(sorted(VALID_STEP_TYPES))}"
             )
 
+        # 解析 loop 类型的子步骤
+        sub_steps: list[StepDefinition] = []
+        if step_type == "loop" and "steps" in step_data:
+            for j, sub_data in enumerate(step_data["steps"]):
+                if not isinstance(sub_data, dict):
+                    raise ValueError(f"步骤 '{step_name}' 的子步骤 {j} 必须是字典")
+                sub_name = sub_data.get("name", f"{step_name}_sub_{j}")
+                sub_type = sub_data.get("type")
+                if not sub_type:
+                    raise ValueError(f"子步骤 '{sub_name}' 必须定义 type 字段")
+                sub_steps.append(
+                    StepDefinition(
+                        name=sub_name,
+                        type=sub_type,
+                        config=sub_data.get("config", {}),
+                        prompt_template=sub_data.get("prompt_template"),
+                        timeout=sub_data.get("timeout", 300),
+                        condition=sub_data.get("condition"),
+                        loop_items=sub_data.get("loop_items"),
+                        max_iterations=sub_data.get("max_iterations", 10),
+                        subtask_workflow=sub_data.get("subtask_workflow"),
+                    )
+                )
+
         steps.append(
             StepDefinition(
                 name=step_name,
@@ -66,6 +96,12 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                 config=step_data.get("config", {}),
                 prompt_template=step_data.get("prompt_template"),
                 timeout=step_data.get("timeout", 300),
+                parallel=step_data.get("parallel", False),
+                steps=sub_steps,
+                condition=step_data.get("condition"),
+                loop_items=step_data.get("loop_items"),
+                max_iterations=step_data.get("max_iterations", 10),
+                subtask_workflow=step_data.get("subtask_workflow"),
             )
         )
 
