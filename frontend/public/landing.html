@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Orchestrator — AI Agent 工作流编排平台</title>
+  <meta name="description" content="唯一带人工审批门的 AI Agent 工作流编排平台。AI 干活，你审批。">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a1a2e; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 100px 0 80px; text-align: center; }
+    .hero h1 { font-size: 3.5rem; font-weight: 800; margin-bottom: 24px; line-height: 1.2; }
+    .hero p { font-size: 1.4rem; opacity: 0.9; max-width: 600px; margin: 0 auto 40px; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn { display: inline-block; padding: 14px 32px; border-radius: 8px; font-size: 1.1rem; font-weight: 600; text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.2); }
+    .btn-primary { background: white; color: #667eea; }
+    .btn-secondary { background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.5); }
+
+    /* Features */
+    .features { padding: 100px 0; background: #f8f9fa; }
+    .features h2 { text-align: center; font-size: 2.5rem; margin-bottom: 60px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; }
+    .feature-card { background: white; padding: 32px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); transition: transform 0.2s; }
+    .feature-card:hover { transform: translateY(-4px); }
+    .feature-icon { font-size: 2.5rem; margin-bottom: 16px; }
+    .feature-card h3 { font-size: 1.3rem; margin-bottom: 12px; color: #1a1a2e; }
+    .feature-card p { color: #666; }
+
+    /* How it works */
+    .how-it-works { padding: 100px 0; }
+    .how-it-works h2 { text-align: center; font-size: 2.5rem; margin-bottom: 60px; }
+    .steps { display: flex; justify-content: center; gap: 48px; flex-wrap: wrap; }
+    .step { text-align: center; max-width: 200px; }
+    .step-number { width: 60px; height: 60px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 700; margin: 0 auto 16px; }
+    .step h3 { margin-bottom: 8px; }
+    .step p { color: #666; font-size: 0.95rem; }
+
+    /* Comparison */
+    .comparison { padding: 100px 0; background: #f8f9fa; }
+    .comparison h2 { text-align: center; font-size: 2.5rem; margin-bottom: 60px; }
+    table { width: 100%; max-width: 800px; margin: 0 auto; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    th, td { padding: 16px 24px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #667eea; color: white; font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    .check { color: #52c41a; font-weight: 700; }
+    .cross { color: #ff4d4f; }
+
+    /* CTA */
+    .cta { padding: 100px 0; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .cta h2 { font-size: 2.5rem; margin-bottom: 24px; }
+    .cta p { font-size: 1.2rem; opacity: 0.9; margin-bottom: 40px; }
+
+    /* Footer */
+    footer { padding: 40px 0; text-align: center; color: #999; font-size: 0.9rem; }
+    footer a { color: #667eea; text-decoration: none; }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2.2rem; }
+      .hero p { font-size: 1.1rem; }
+      .steps { flex-direction: column; align-items: center; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <h1>AI Agent 工作流编排<br>你来审批，AI 干活</h1>
+      <p>唯一带人工审批门的 AI Agent 工作流平台。定义 YAML 工作流，AI 自动执行，关键节点你来把关。</p>
+      <div class="hero-buttons">
+        <a href="https://github.com/wyy7777/agent-orchestrator" class="btn btn-primary">⭐ GitHub</a>
+        <a href="/docs" class="btn btn-secondary">📖 文档</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features">
+    <div class="container">
+      <h2>为什么选择 Agent Orchestrator？</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3>人工审批门控</h3>
+          <p>关键步骤暂停等待人工审批，防止 AI 失控。支持任意步骤插入审批节点。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📋</div>
+          <h3>YAML 工作流</h3>
+          <p>声明式定义多步骤 AI 工作流，支持并行执行、条件分支、循环、子任务。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>一键回滚</h3>
+          <p>出问题可回退到任意已完成步骤，保证代码安全。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>多模型支持</h3>
+          <p>DeepSeek / OpenAI / Claude 自由切换，自动重试和超时处理。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔌</div>
+          <h3>插件系统</h3>
+          <p>HTTP 请求、Shell 命令、数据转换等内置插件，支持自定义扩展。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>实时监控</h3>
+          <p>WebSocket 实时推送任务状态，Dashboard 可视化执行统计。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="how-it-works">
+    <div class="container">
+      <h2>如何使用？</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>定义工作流</h3>
+          <p>用 YAML 定义分析、执行、审查等步骤</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>触发执行</h3>
+          <p>手动触发、Webhook 或定时任务</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>AI 执行</h3>
+          <p>Agent 自动分析代码、生成修复方案</p>
+        </div>
+        <div class="step">
+          <div class="step-number">4</div>
+          <h3>人工审批</h3>
+          <p>关键节点暂停，你来决定是否继续</p>
+        </div>
+        <div class="step">
+          <div class="step-number">5</div>
+          <h3>自动合并</h3>
+          <p>审批通过后自动创建 GitHub PR</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section class="comparison">
+    <div class="container">
+      <h2>与其他方案对比</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>功能</th>
+            <th>Agent Orchestrator</th>
+            <th>Bernstein</th>
+            <th>Devin</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>人工审批门控</td>
+            <td class="check">✅</td>
+            <td class="cross">❌</td>
+            <td class="cross">❌</td>
+          </tr>
+          <tr>
+            <td>YAML 工作流</td>
+            <td class="check">✅ 完整</td>
+            <td>部分</td>
+            <td class="cross">❌</td>
+          </tr>
+          <tr>
+            <td>一键回滚</td>
+            <td class="check">✅</td>
+            <td class="cross">❌</td>
+            <td class="cross">❌</td>
+          </tr>
+          <tr>
+            <td>插件系统</td>
+            <td class="check">✅ HTTP/Shell/Transform</td>
+            <td>CLI 适配器</td>
+            <td class="cross">❌</td>
+          </tr>
+          <tr>
+            <td>多模型支持</td>
+            <td class="check">✅ DeepSeek/OpenAI/Claude</td>
+            <td class="check">✅</td>
+            <td>单一模型</td>
+          </tr>
+          <tr>
+            <td>Web 界面</td>
+            <td class="check">✅</td>
+            <td>TUI</td>
+            <td class="check">✅</td>
+          </tr>
+          <tr>
+            <td>桌面端</td>
+            <td class="check">✅ Tauri</td>
+            <td class="cross">❌</td>
+            <td class="cross">❌</td>
+          </tr>
+          <tr>
+            <td>开源协议</td>
+            <td>MIT</td>
+            <td>Apache 2.0</td>
+            <td>商业</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <div class="container">
+      <h2>开始使用 Agent Orchestrator</h2>
+      <p>5 分钟快速上手，让 AI 可靠地为你工作</p>
+      <div class="hero-buttons">
+        <a href="https://github.com/wyy7777/agent-orchestrator" class="btn btn-primary">⭐ Star on GitHub</a>
+        <a href="https://github.com/wyy7777/agent-orchestrator/releases" class="btn btn-secondary">📥 下载桌面端</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>Agent Orchestrator &copy; 2026 | <a href="https://github.com/wyy7777/agent-orchestrator">GitHub</a> | MIT License</p>
+    </div>
+  </footer>
+</body>
+</html>
