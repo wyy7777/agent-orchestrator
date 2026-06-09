@@ -11,6 +11,7 @@ import {
   BulbOutlined,
   BulbFilled,
   ThunderboltOutlined,
+  ApiOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 
@@ -22,6 +23,7 @@ const menuItems = [
   { key: "/tasks", icon: <PlayCircleOutlined />, label: "任务" },
   { key: "/approvals", icon: <CheckCircleOutlined />, label: "审批" },
   { key: "/triggers", icon: <ThunderboltOutlined />, label: "触发器" },
+  { key: "/plugins", icon: <ApiOutlined />, label: "插件" },
 ];
 
 interface AppLayoutProps {

@@ -211,7 +211,7 @@ async def get_dashboard_errors(
 
 @router.get("/export")
 async def export_dashboard_data(
-    type: str = Query("tasks", regex="^(tasks|executions)$"),
+    type: str = Query("tasks", pattern="^(tasks|executions)$"),
     days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
 ):

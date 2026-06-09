@@ -70,3 +70,5 @@ docs/路线图.md
 # 冗余文件
 backend/examples/
 test_full.py
+*.db-shm
+*.db-wal
