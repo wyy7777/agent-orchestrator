@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Layout as AntLayout, Menu, Typography, theme, Button, Tooltip } from "antd";
+import { Layout as AntLayout, Menu, Typography, theme, Button, Tooltip, Space } from "antd";
 import {
   DashboardOutlined,
   BranchesOutlined,
@@ -12,19 +12,12 @@ import {
   BulbFilled,
   ThunderboltOutlined,
   ApiOutlined,
+  GlobalOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
+import { useI18n } from "@/lib/i18n";
 
 const { Header, Sider, Content } = AntLayout;
-
-const menuItems = [
-  { key: "/", icon: <DashboardOutlined />, label: "仪表盘" },
-  { key: "/workflows", icon: <BranchesOutlined />, label: "工作流" },
-  { key: "/tasks", icon: <PlayCircleOutlined />, label: "任务" },
-  { key: "/approvals", icon: <CheckCircleOutlined />, label: "审批" },
-  { key: "/triggers", icon: <ThunderboltOutlined />, label: "触发器" },
-  { key: "/plugins", icon: <ApiOutlined />, label: "插件" },
-];
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -36,6 +29,20 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
+  const { locale, t, setLocale } = useI18n();
+
+  const menuItems = [
+    { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
+    { key: "/workflows", icon: <BranchesOutlined />, label: t("nav.workflows") },
+    { key: "/tasks", icon: <PlayCircleOutlined />, label: t("nav.tasks") },
+    { key: "/approvals", icon: <CheckCircleOutlined />, label: t("nav.approvals") },
+    { key: "/triggers", icon: <ThunderboltOutlined />, label: t("nav.triggers") },
+    { key: "/plugins", icon: <ApiOutlined />, label: t("nav.plugins") },
+  ];
+
+  const toggleLocale = () => {
+    setLocale(locale === "zh" ? "en" : "zh");
+  };
 
   return (
     <AntLayout style={{ minHeight: "100vh" }}>
@@ -60,7 +67,7 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
           <RocketOutlined style={{ fontSize: 24, color: "#1677ff" }} />
           {!collapsed && (
             <Typography.Title level={4} style={{ margin: 0, color: "#fff" }}>
-              Agent 编排
+              Agent Orchestrator
             </Typography.Title>
           )}
         </div>
@@ -95,15 +102,26 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
               {menuItems.find((m) => m.key === router.pathname)?.label || "Agent Orchestrator"}
             </Typography.Title>
           </div>
-          {toggleDark && (
-            <Tooltip title={darkMode ? "切换亮色模式" : "切换暗色模式"}>
+          <Space>
+            <Tooltip title={locale === "zh" ? "Switch to English" : "切换到中文"}>
               <Button
                 type="text"
-                icon={darkMode ? <BulbFilled style={{ color: "#faad14" }} /> : <BulbOutlined />}
-                onClick={toggleDark}
-              />
+                icon={<GlobalOutlined />}
+                onClick={toggleLocale}
+              >
+                {locale === "zh" ? "EN" : "中"}
+              </Button>
             </Tooltip>
-          )}
+            {toggleDark && (
+              <Tooltip title={darkMode ? t("common.light_mode") : t("common.dark_mode")}>
+                <Button
+                  type="text"
+                  icon={darkMode ? <BulbFilled style={{ color: "#faad14" }} /> : <BulbOutlined />}
+                  onClick={toggleDark}
+                />
+              </Tooltip>
+            )}
+          </Space>
         </Header>
         <Content
           style={{

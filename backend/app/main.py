@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import settings
 from app.database import init_db
+from app.logging_config import setup_logging
 from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications, plugins
 from app.services.ws_manager import ws_manager
 from app.services.scheduler import scheduler
@@ -19,10 +20,8 @@ from app.services.scheduler import scheduler
 # 确保 agent handlers 被注册
 import app.agents.executor  # noqa: F401
 
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# 配置日志（控制台 + 文件旋转）
+setup_logging(log_level="DEBUG" if settings.DEBUG else "INFO")
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"

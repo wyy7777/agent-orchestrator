@@ -5,11 +5,6 @@ import {
   ReloadOutlined,
   RocketOutlined,
   DownloadOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  LoadingOutlined,
-  AuditOutlined,
-  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { Line, Pie, Column } from "@ant-design/charts";
@@ -17,6 +12,7 @@ import DashboardStats from "@/components/DashboardStats";
 import { dashboardApi, taskApi, workflowApi } from "@/lib/api";
 import type { DashboardStatsData, TaskItem, WorkflowItem } from "@/lib/api";
 import { statusColors } from "@/lib/constants";
+import { useI18n } from "@/lib/i18n";
 
 const { Title } = Typography;
 
@@ -38,6 +34,7 @@ export default function DashboardPage() {
   const [allTasks, setAllTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { t, locale } = useI18n();
 
   const loadData = async () => {
     setLoading(true);
@@ -56,7 +53,7 @@ export default function DashboardPage() {
       wfData.items.forEach((w) => (wfMap[w.id] = w));
       setWorkflows(wfMap);
     } catch (err) {
-      message.error("加载数据失败");
+      message.error(t("common.error"));
     } finally {
       setLoading(false);
     }
@@ -145,13 +142,13 @@ export default function DashboardPage() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
-        <Title level={3}>仪表盘</Title>
+        <Title level={3}>{t("dashboard.title")}</Title>
         <Space>
           <Button icon={<DownloadOutlined />} onClick={exportCSV}>
-            导出 CSV
+            {t("common.export")} CSV
           </Button>
           <Button icon={<ReloadOutlined />} onClick={loadData}>
-            刷新
+            {t("common.refresh")}
           </Button>
         </Space>
       </div>
@@ -164,7 +161,7 @@ export default function DashboardPage() {
         <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
           {/* 任务趋势折线图 */}
           <Col xs={24} lg={12}>
-            <Card title="任务趋势（最近 7 天）">
+            <Card title={t("dashboard.task_trend")}>
               <Line
                 data={trendData}
                 xField="date"
@@ -179,7 +176,7 @@ export default function DashboardPage() {
 
           {/* 成功率饼图 */}
           <Col xs={24} lg={12}>
-            <Card title="任务状态分布">
+            <Card title={locale === "zh" ? "任务状态分布" : "Task Status"}>
               <Pie
                 data={pieData}
                 angleField="value"
@@ -197,7 +194,7 @@ export default function DashboardPage() {
 
           {/* Token 消耗柱状图 */}
           <Col xs={24} lg={12}>
-            <Card title="Token 消耗（按工作流）">
+            <Card title={t("dashboard.token_usage")}>
               {tokenBarData.length === 0 ? (
                 <div style={{ height: 260, display: "flex", alignItems: "center", justifyContent: "center", color: "#999" }}>
                   暂无数据
@@ -218,7 +215,7 @@ export default function DashboardPage() {
 
           {/* 热门工作流 TOP 5 */}
           <Col xs={24} lg={12}>
-            <Card title="热门工作流 TOP 5">
+            <Card title={t("dashboard.top_workflows")}>
               <Table
                 dataSource={topWorkflows}
                 rowKey="name"
@@ -245,7 +242,7 @@ export default function DashboardPage() {
 
         {/* 最近任务 */}
         <Card
-          title="最近任务"
+          title={t("dashboard.recent_tasks")}
           style={{ marginTop: 24 }}
           extra={
             <Button
@@ -253,18 +250,18 @@ export default function DashboardPage() {
               icon={<PlusOutlined />}
               onClick={() => router.push("/tasks")}
             >
-              查看全部
+              {locale === "zh" ? "查看全部" : "View All"}
             </Button>
           }
         >
           {recentTasks.length === 0 && !loading ? (
-            <Empty description="还没有执行过任务">
+            <Empty description={locale === "zh" ? "还没有执行过任务" : "No tasks yet"}>
               <Button
                 type="primary"
                 icon={<RocketOutlined />}
                 onClick={() => router.push("/workflows")}
               >
-                去创建工作流
+                {locale === "zh" ? "去创建工作流" : "Create Workflow"}
               </Button>
             </Empty>
           ) : (
