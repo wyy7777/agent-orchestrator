@@ -113,12 +113,27 @@ export interface TaskListResponse {
 }
 
 export const taskApi = {
-  list: (params?: { workflow_id?: string; status?: string; skip?: number; limit?: number }) => {
+  list: (params?: {
+    workflow_id?: string;
+    status?: string;
+    q?: string;
+    date_from?: string;
+    date_to?: string;
+    sort_by?: string;
+    sort_order?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
     const sp = new URLSearchParams();
     if (params?.workflow_id) sp.set("workflow_id", params.workflow_id);
     if (params?.status) sp.set("status", params.status);
-    if (params?.skip) sp.set("skip", String(params.skip));
-    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.q) sp.set("q", params.q);
+    if (params?.date_from) sp.set("date_from", params.date_from);
+    if (params?.date_to) sp.set("date_to", params.date_to);
+    if (params?.sort_by) sp.set("sort_by", params.sort_by);
+    if (params?.sort_order) sp.set("sort_order", params.sort_order);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.page_size) sp.set("page_size", String(params.page_size));
     return request<TaskListResponse>(`/api/tasks?${sp}`);
   },
   get: (id: string) => request<TaskItem>(`/api/tasks/${id}`),
@@ -185,4 +200,47 @@ export interface DashboardStatsData {
 
 export const dashboardApi = {
   stats: () => request<DashboardStatsData>("/api/dashboard/stats"),
+};
+
+// === Notification ===
+export interface NotificationConfig {
+  slack_webhook_url: string;
+  dingtalk_webhook_url: string;
+  notify_on_task_completed: boolean;
+  notify_on_task_failed: boolean;
+  notify_on_approval_needed: boolean;
+}
+
+export interface NotificationHistoryItem {
+  id: string;
+  channel: string;
+  event_type: string;
+  title: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface NotificationHistoryResponse {
+  items: NotificationHistoryItem[];
+  total: number;
+}
+
+export const notificationApi = {
+  getConfig: () => request<NotificationConfig>("/api/notifications/config"),
+  updateConfig: (data: NotificationConfig) =>
+    request<NotificationConfig>("/api/notifications/config", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  testSlack: () =>
+    request<{ success: boolean; message: string }>("/api/notifications/test/slack", {
+      method: "POST",
+    }),
+  testDingtalk: () =>
+    request<{ success: boolean; message: string }>("/api/notifications/test/dingtalk", {
+      method: "POST",
+    }),
+  history: (limit = 50) =>
+    request<NotificationHistoryResponse>(`/api/notifications/history?limit=${limit}`),
 };

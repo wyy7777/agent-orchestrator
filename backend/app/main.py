@@ -12,8 +12,9 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import settings
 from app.database import init_db
-from app.api import workflows, tasks, approvals, dashboard
+from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications
 from app.services.ws_manager import ws_manager
+from app.services.scheduler import scheduler
 
 # 确保 agent handlers 被注册
 import app.agents.executor  # noqa: F401
@@ -66,7 +67,11 @@ async def lifespan(app: FastAPI):
     if os.environ.get("DEMO_MODE") == "true":
         await _create_demo_data()
 
+    scheduler.start_scheduler()
+
     yield
+
+    scheduler.stop_scheduler()
 
 
 app = FastAPI(
@@ -88,6 +93,9 @@ app.include_router(workflows.router)
 app.include_router(tasks.router)
 app.include_router(approvals.router)
 app.include_router(dashboard.router)
+app.include_router(webhooks.router)
+app.include_router(schedules.router)
+app.include_router(notifications.router)
 
 
 # 简单的内存 Rate Limiter（每 IP 每分钟 60 次请求）

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.services.notifier import notifier
 import functools
 from app.models.approval import Approval
 from app.models.step_execution import StepExecution
@@ -132,6 +133,9 @@ class ExecutionEngine:
         async_task = asyncio.create_task(self._execute_workflow(task_id, workflow_def))
         self._running_tasks[task_id] = async_task
 
+        # 通知：任务开始
+        await notifier.notify_task_started(task_id, workflow_def.name)
+
         return task
 
     async def resume_task(self, task_id: str) -> Task:
@@ -222,6 +226,7 @@ class ExecutionEngine:
                         db.add(approval)
                         await db.commit()
                         logger.info(f"任务 {task_id} 在步骤 '{step_exec.step_name}' 等待审批")
+                        await notifier.notify_approval_needed(task_id, step_exec.step_name)
                         return  # 暂停，等待外部审批信号
 
                     # 执行普通步骤
@@ -257,6 +262,7 @@ class ExecutionEngine:
                             logger.info(f"PR 已创建: {task.pr_url}")
 
                         logger.info(f"步骤 '{step_exec.step_name}' 完成, tokens={tokens}")
+                        await notifier.notify_step_completed(task_id, step_exec.step_name)
 
                     except asyncio.TimeoutError:
                         step_exec.status = StepStatus.FAILED.value
@@ -267,6 +273,8 @@ class ExecutionEngine:
                         task.completed_at = datetime.now(timezone.utc)
                         await db.commit()
                         logger.error(f"步骤 '{step_exec.step_name}' 超时")
+                        await notifier.notify_step_failed(task_id, step_exec.step_name, step_exec.error_message)
+                        await notifier.notify_task_failed(task_id, workflow_def.name, task.error_message)
                         return
                     except Exception as e:
                         step_exec.status = StepStatus.FAILED.value
@@ -277,6 +285,8 @@ class ExecutionEngine:
                         task.completed_at = datetime.now(timezone.utc)
                         await db.commit()
                         logger.error(f"步骤 '{step_exec.step_name}' 失败: {e}")
+                        await notifier.notify_step_failed(task_id, step_exec.step_name, str(e))
+                        await notifier.notify_task_failed(task_id, workflow_def.name, str(e))
                         return
 
                     await db.commit()
@@ -286,6 +296,7 @@ class ExecutionEngine:
                 task.completed_at = datetime.now(timezone.utc)
                 await db.commit()
                 logger.info(f"任务 {task_id} 完成")
+                await notifier.notify_task_completed(task_id, workflow_def.name)
 
         except Exception as e:
             logger.error(f"工作流执行异常: {e}", exc_info=True)

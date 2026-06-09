@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,36 +14,89 @@ from app.services.ws_manager import ws_manager
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
+VALID_SORT_FIELDS = {
+    "created_at": Task.created_at,
+    "started_at": Task.started_at,
+    "completed_at": Task.completed_at,
+    "tokens_used": Task.total_tokens_used,
+}
+
+VALID_STATUSES = {"pending", "running", "completed", "failed", "paused"}
+
+
+def _build_task_filters(
+    query,
+    *,
+    q: str | None = None,
+    status: str | None = None,
+    workflow_id: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+):
+    if q:
+        pattern = f"%{q}%"
+        query = query.where(
+            or_(
+                Task.id.like(pattern),
+                Task.error_message.like(pattern),
+                Task.workflow.has(Workflow.name.like(pattern)),
+            )
+        )
+    if status:
+        query = query.where(Task.status == status)
+    if workflow_id:
+        query = query.where(Task.workflow_id == workflow_id)
+    if date_from:
+        query = query.where(Task.created_at >= date_from)
+    if date_to:
+        query = query.where(Task.created_at <= date_to)
+    return query
+
 
 @router.get("", response_model=TaskListResponse)
 async def list_tasks(
-    workflow_id: str | None = None,
-    status: str | None = None,
-    skip: int = 0,
-    limit: int = 20,
+    q: str | None = Query(None, description="关键词搜索（任务ID、工作流名称、错误信息）"),
+    status: str | None = Query(None, description="状态筛选"),
+    workflow_id: str | None = Query(None, description="工作流ID筛选"),
+    date_from: datetime | None = Query(None, description="起始日期"),
+    date_to: datetime | None = Query(None, description="截止日期"),
+    sort_by: str = Query("created_at", description="排序字段"),
+    sort_order: str = Query("desc", description="排序方向"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Task)
+    if status and status not in VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"无效状态: {status}，可选值: {VALID_STATUSES}")
+    if sort_by not in VALID_SORT_FIELDS:
+        raise HTTPException(status_code=400, detail=f"无效排序字段: {sort_by}，可选值: {set(VALID_SORT_FIELDS)}")
+    if sort_order not in ("asc", "desc"):
+        raise HTTPException(status_code=400, detail="排序方向只能是 asc 或 desc")
+
+    filter_kwargs = dict(q=q, status=status, workflow_id=workflow_id, date_from=date_from, date_to=date_to)
+
+    # 计数查询
     count_query = select(func.count(Task.id))
-
-    if workflow_id:
-        query = query.where(Task.workflow_id == workflow_id)
-        count_query = count_query.where(Task.workflow_id == workflow_id)
-    if status:
-        query = query.where(Task.status == status)
-        count_query = count_query.where(Task.status == status)
-
+    count_query = _build_task_filters(count_query, **filter_kwargs)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
+    # 数据查询
+    query = select(Task)
+    query = _build_task_filters(query, **filter_kwargs)
+
+    order_column = VALID_SORT_FIELDS[sort_by]
+    order = order_column.asc() if sort_order == "asc" else order_column.desc()
+
+    offset = (page - 1) * page_size
     result = await db.execute(
         query.options(selectinload(Task.step_executions))
-        .order_by(Task.created_at.desc())
-        .offset(skip)
-        .limit(limit)
+        .order_by(order)
+        .offset(offset)
+        .limit(page_size)
     )
     items = result.scalars().all()
-    return TaskListResponse(items=items, total=total)
+    return TaskListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=TaskResponse, status_code=201)

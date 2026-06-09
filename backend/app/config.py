@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     AI_MAX_RETRIES: int = 3
     AI_TIMEOUT_SECONDS: int = 120
 
+    # 通知
+    SLACK_WEBHOOK_URL: str = ""
+    DINGTALK_WEBHOOK_URL: str = ""
+    NOTIFY_ON_TASK_COMPLETE: bool = True
+    NOTIFY_ON_TASK_FAIL: bool = True
+    NOTIFY_ON_APPROVAL_NEEDED: bool = True
+
     # 服务器
     HOST: str = "0.0.0.0"
     PORT: int = 8000

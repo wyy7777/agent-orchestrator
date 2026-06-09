@@ -10,6 +10,7 @@ import {
   RocketOutlined,
   BulbOutlined,
   BulbFilled,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 
@@ -20,6 +21,7 @@ const menuItems = [
   { key: "/workflows", icon: <BranchesOutlined />, label: "工作流" },
   { key: "/tasks", icon: <PlayCircleOutlined />, label: "任务" },
   { key: "/approvals", icon: <CheckCircleOutlined />, label: "审批" },
+  { key: "/triggers", icon: <ThunderboltOutlined />, label: "触发器" },
 ];
 
 interface AppLayoutProps {

@@ -1,0 +1,57 @@
+from fastapi import APIRouter, HTTPException
+
+from app.services.scheduler import scheduler
+from app.schemas.schedule import ScheduleCreate, ScheduleResponse, ScheduleListResponse
+
+router = APIRouter(prefix="/api/schedules", tags=["schedules"])
+
+
+@router.post("", response_model=ScheduleResponse, status_code=201)
+async def create_schedule(body: ScheduleCreate):
+    """创建一条调度配置。"""
+    try:
+        schedule = scheduler.add_schedule(
+            workflow_id=body.workflow_id,
+            cron_expr=body.cron_expr,
+            payload=body.payload,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return ScheduleResponse(
+        id=schedule.id,
+        workflow_id=schedule.workflow_id,
+        cron_expr=schedule.cron_expr,
+        payload=schedule.payload,
+        enabled=schedule.enabled,
+        created_at=schedule.created_at,
+        last_triggered_at=schedule.last_triggered_at,
+    )
+
+
+@router.get("", response_model=ScheduleListResponse)
+async def list_schedules():
+    """列出所有调度配置。"""
+    items = scheduler.list_schedules()
+    return ScheduleListResponse(
+        items=[
+            ScheduleResponse(
+                id=s.id,
+                workflow_id=s.workflow_id,
+                cron_expr=s.cron_expr,
+                payload=s.payload,
+                enabled=s.enabled,
+                created_at=s.created_at,
+                last_triggered_at=s.last_triggered_at,
+            )
+            for s in items
+        ],
+        total=len(items),
+    )
+
+
+@router.delete("/{schedule_id}", status_code=204)
+async def delete_schedule(schedule_id: str):
+    """删除一条调度配置。"""
+    if not scheduler.remove_schedule(schedule_id):
+        raise HTTPException(status_code=404, detail="调度不存在")
