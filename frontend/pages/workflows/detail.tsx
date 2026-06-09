@@ -31,7 +31,7 @@ export default function WorkflowDetailPage() {
     try {
       const [wf, tasksRes] = await Promise.all([
         workflowApi.get(id as string),
-        taskApi.list({ workflow_id: id as string, limit: 20 }),
+        taskApi.list({ workflow_id: id as string, page_size: 20 }),
       ]);
       setWorkflow(wf);
       setTasks(tasksRes.items);
