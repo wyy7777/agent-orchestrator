@@ -34,26 +34,14 @@ Thumbs.db
 
 # Build artifacts
 backend/static/
-
-# Data
-~/.agent-orch/
-desktop-tauri/src-tauri/target/
-backend/static/
 backend/dist/
 backend/build/
+desktop-tauri/src-tauri/target/
 desktop-tauri/src-tauri/binaries/
 *.exe
 *.msi
 *.spec
 release/
-
-# 安装产物（防止误提交）
-"Agent Orchestrator/"
-
-# PyInstaller
-backend/dist/
-backend/build/
-backend/*.spec
 
 # 安装产物
 Agent Orchestrator/
@@ -70,3 +58,15 @@ frontend/CLAUDE.md
 # Alembic
 backend/alembic/versions/*.py
 !backend/alembic/versions/.gitkeep
+
+# 内部文档（不公开）
+docs/MVP.md
+docs/PRD.md
+docs/商业计划.md
+docs/架构.md
+docs/竞品分析.md
+docs/路线图.md
+
+# 冗余文件
+backend/examples/
+test_full.py
