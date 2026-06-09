@@ -59,6 +59,10 @@ async def lifespan(app: FastAPI):
         engine = ExecutionEngine(db)
         await engine.recover_orphaned_tasks()
 
+    # 加载外部插件
+    from app.engine.plugin import load_external_plugins
+    load_external_plugins()
+
     logger.info(f"Agent Orchestrator 已启动: http://{settings.HOST}:{settings.PORT}")
 
     # Demo 模式：自动创建示例数据

@@ -1,8 +1,11 @@
 """插件系统：提供可扩展的步骤插件接口和注册表。"""
 from __future__ import annotations
 
+import importlib.util
 import logging
+import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import httpx
 
@@ -10,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 # 插件注册表
 _plugins: dict[str, "StepPlugin"] = {}
+
+# 外部插件目录
+PLUGIN_DIR = Path(__file__).parent.parent.parent / "plugins"
 
 
 class StepPlugin(ABC):
@@ -47,9 +53,46 @@ def list_plugins() -> list[dict]:
             "name": p.name,
             "description": p.description,
             "schema": p.get_schema(),
+            "source": getattr(p, "_source", "builtin"),
         }
         for p in _plugins.values()
     ]
+
+
+def load_external_plugins(plugin_dir: str | Path | None = None):
+    """从外部目录加载插件 Python 文件。
+
+    插件文件需在模块级别调用 @register_plugin("name") 装饰器。
+    """
+    dir_path = Path(plugin_dir) if plugin_dir else PLUGIN_DIR
+    if not dir_path.exists():
+        logger.debug(f"外部插件目录不存在: {dir_path}")
+        return
+
+    loaded = 0
+    for py_file in dir_path.glob("*.py"):
+        if py_file.name.startswith("_"):
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location(
+                f"plugins.{py_file.stem}", str(py_file)
+            )
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = module
+                spec.loader.exec_module(module)
+                loaded += 1
+                logger.info(f"已加载外部插件: {py_file.name}")
+        except Exception as e:
+            logger.error(f"加载外部插件失败 {py_file.name}: {e}")
+
+    # 标记外部插件来源
+    for name, plugin in _plugins.items():
+        if not hasattr(plugin, "_source"):
+            plugin._source = "builtin"
+
+    if loaded:
+        logger.info(f"共加载 {loaded} 个外部插件")
 
 
 # ---------- 内置插件 ----------
