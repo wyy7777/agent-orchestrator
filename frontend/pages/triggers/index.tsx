@@ -57,30 +57,30 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 const webhookApi = {
-  list: () => apiRequest<WebhookItem[]>("/api/triggers/webhooks"),
+  list: () => apiRequest<WebhookItem[]>("/api/webhooks"),
   create: (data: Omit<WebhookItem, "id" | "url" | "created_at">) =>
-    apiRequest<WebhookItem>("/api/triggers/webhooks", {
+    apiRequest<WebhookItem>("/api/webhooks", {
       method: "POST",
       body: JSON.stringify(data),
     }),
   delete: (id: string) =>
-    apiRequest<void>(`/api/triggers/webhooks/${id}`, { method: "DELETE" }),
+    apiRequest<void>(`/api/webhooks/${id}`, { method: "DELETE" }),
 };
 
 const scheduleApi = {
-  list: () => apiRequest<ScheduleItem[]>("/api/triggers/schedules"),
+  list: () => apiRequest<ScheduleItem[]>("/api/schedules"),
   create: (data: Omit<ScheduleItem, "id" | "last_run_at" | "next_run_at" | "created_at">) =>
-    apiRequest<ScheduleItem>("/api/triggers/schedules", {
+    apiRequest<ScheduleItem>("/api/schedules", {
       method: "POST",
       body: JSON.stringify(data),
     }),
   toggle: (id: string, enabled: boolean) =>
-    apiRequest<ScheduleItem>(`/api/triggers/schedules/${id}`, {
+    apiRequest<ScheduleItem>(`/api/schedules/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ enabled }),
     }),
   delete: (id: string) =>
-    apiRequest<void>(`/api/triggers/schedules/${id}`, { method: "DELETE" }),
+    apiRequest<void>(`/api/schedules/${id}`, { method: "DELETE" }),
 };
 
 // ==================== Webhook 标签页 ====================

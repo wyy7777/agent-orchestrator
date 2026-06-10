@@ -9,7 +9,7 @@ import { useRouter } from "next/router";
 import { workflowApi } from "@/lib/api";
 import type { WorkflowItem } from "@/lib/api";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Paragraph } = Typography;
 
 export default function WorkflowListPage() {
   const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);

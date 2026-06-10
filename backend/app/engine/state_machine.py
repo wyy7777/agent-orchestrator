@@ -12,7 +12,6 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.services.notifier import notifier
-import functools
 from app.models.approval import Approval
 from app.models.step_execution import StepExecution
 from app.models.task import Task

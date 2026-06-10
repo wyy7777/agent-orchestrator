@@ -9,6 +9,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.database import init_db
@@ -84,10 +85,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = settings.cors_origins_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=(_cors_origins != ["*"]),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -100,6 +102,28 @@ app.include_router(webhooks.router)
 app.include_router(schedules.router)
 app.include_router(notifications.router)
 app.include_router(plugins.router)
+
+
+# API Key 认证中间件
+API_KEY_EXEMPT_PATHS = {"/api/health", "/api/webhooks/github"}
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if settings.API_KEY and request.url.path.startswith("/api/"):
+            # 豁免路径
+            if request.url.path in API_KEY_EXEMPT_PATHS:
+                return await call_next(request)
+            api_key = request.headers.get("X-API-Key")
+            if api_key != settings.API_KEY:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "无效或缺失的 API Key"},
+                )
+        return await call_next(request)
+
+
+app.add_middleware(APIKeyMiddleware)
 
 
 # 简单的内存 Rate Limiter（每 IP 每分钟 60 次请求）

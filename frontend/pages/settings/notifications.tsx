@@ -132,8 +132,8 @@ export default function NotificationsPage() {
             initialValues={{
               slack_webhook_url: "",
               dingtalk_webhook_url: "",
-              notify_on_task_completed: true,
-              notify_on_task_failed: true,
+              notify_on_task_complete: true,
+              notify_on_task_fail: true,
               notify_on_approval_needed: true,
             }}
           >
@@ -180,7 +180,7 @@ export default function NotificationsPage() {
 
             <Form.Item
               label="任务完成时通知"
-              name="notify_on_task_completed"
+              name="notify_on_task_complete"
               valuePropName="checked"
             >
               <Switch checkedChildren="开" unCheckedChildren="关" />
@@ -188,7 +188,7 @@ export default function NotificationsPage() {
 
             <Form.Item
               label="任务失败时通知"
-              name="notify_on_task_failed"
+              name="notify_on_task_fail"
               valuePropName="checked"
             >
               <Switch checkedChildren="开" unCheckedChildren="关" />

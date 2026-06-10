@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.engine.plugin import get_plugin, list_plugins, _plugins
+from app.engine.plugin import get_plugin, list_plugins
 
 logger = logging.getLogger(__name__)
 

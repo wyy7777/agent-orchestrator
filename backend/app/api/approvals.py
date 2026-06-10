@@ -4,16 +4,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.database import get_db, async_session
 from app.models.approval import Approval
 from app.models.step_execution import StepExecution
 from app.models.task import Task
-from app.models.workflow import Workflow
 from app.schemas.approval import ApprovalCreate, ApprovalListResponse, ApprovalResponse
 from app.engine.state_machine import ExecutionEngine
-from app.engine.yaml_parser import parse_workflow_yaml
 from app.services.ws_manager import ws_manager
 
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])

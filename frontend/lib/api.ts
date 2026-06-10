@@ -206,8 +206,8 @@ export const dashboardApi = {
 export interface NotificationConfig {
   slack_webhook_url: string;
   dingtalk_webhook_url: string;
-  notify_on_task_completed: boolean;
-  notify_on_task_failed: boolean;
+  notify_on_task_complete: boolean;
+  notify_on_task_fail: boolean;
   notify_on_approval_needed: boolean;
 }
 

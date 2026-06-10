@@ -72,3 +72,4 @@ backend/examples/
 test_full.py
 *.db-shm
 *.db-wal
+backend/logs/
