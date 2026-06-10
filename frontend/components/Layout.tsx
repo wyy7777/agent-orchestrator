@@ -70,6 +70,24 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
     }
   }, []);
 
+  // 全局键盘快捷键
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K 快速搜索/跳转
+      if (e.ctrlKey && e.key === "k") {
+        e.preventDefault();
+        // 可以打开搜索模态框
+      }
+      // Ctrl+/ 显示快捷键帮助
+      if (e.ctrlKey && e.key === "/") {
+        e.preventDefault();
+        message.info("快捷键: Ctrl+K 搜索 | Ctrl+Shift+O 打开窗口");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const menuItems = [
     { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
     { key: "/workflows", icon: <BranchesOutlined />, label: t("nav.workflows") },

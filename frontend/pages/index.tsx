@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { Typography, Spin, message, Card, Table, Tag, Button, Space, Row, Col, Empty, Alert, List, Modal } from "antd";
+import { Typography, Spin, message, Card, Table, Tag, Button, Space, Row, Col, Empty, Alert, List, Modal, Skeleton } from "antd";
 import {
   PlusOutlined,
   ReloadOutlined,
@@ -260,7 +260,32 @@ export default function DashboardPage() {
         </Space>
       </div>
 
-      <Spin spinning={loading}>
+      {loading ? (
+        <div>
+          <Row gutter={[16, 16]}>
+            {[1, 2, 3, 4].map((i) => (
+              <Col xs={24} sm={12} md={6} key={i}>
+                <Card>
+                  <Skeleton active paragraph={{ rows: 1 }} />
+                </Card>
+              </Col>
+            ))}
+          </Row>
+          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+            <Col xs={24} lg={12}>
+              <Card>
+                <Skeleton.Input active block style={{ height: 260 }} />
+              </Card>
+            </Col>
+            <Col xs={24} lg={12}>
+              <Card>
+                <Skeleton.Input active block style={{ height: 260 }} />
+              </Card>
+            </Col>
+          </Row>
+        </div>
+      ) : (
+      <>
         {/* 基础统计卡片 */}
         <DashboardStats stats={stats} />
 
@@ -422,7 +447,7 @@ export default function DashboardPage() {
             />
           )}
         </Card>
-      </Spin>
+      )}
 
       {/* 欢迎弹窗 - 首次访问 */}
       <Modal

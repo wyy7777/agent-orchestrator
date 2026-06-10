@@ -28,6 +28,9 @@ const typeLabels: Record<string, string> = {
   approval: "审批",
   merge: "合并",
   script: "脚本",
+  condition: "条件",
+  loop: "循环",
+  subtask: "子任务",
 };
 
 interface Props {

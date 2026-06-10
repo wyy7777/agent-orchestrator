@@ -1,11 +1,13 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Typography, Card, Descriptions, Tag, Button, Space, message, Spin,
-  Drawer, Divider, Modal, InputNumber, Popconfirm, Alert,
+  Drawer, Divider, Modal, InputNumber, Popconfirm, Alert, Progress, Timeline, Badge,
 } from "antd";
 import {
   ArrowLeftOutlined, RollbackOutlined, ReloadOutlined,
-  PlayCircleOutlined,
+  PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined,
+  LoadingOutlined, ClockCircleOutlined, PauseCircleOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { taskApi } from "@/lib/api";
@@ -15,6 +17,16 @@ import { connectWebSocket, disconnectWebSocket, onMessage } from "@/lib/ws";
 import { statusColors } from "@/lib/constants";
 
 const { Title, Text, Paragraph } = Typography;
+
+/** 步骤状态图标 */
+const STEP_STATUS_ICON: Record<string, React.ReactNode> = {
+  pending: <ClockCircleOutlined style={{ color: "#d9d9d9" }} />,
+  running: <LoadingOutlined style={{ color: "#1677ff" }} spin />,
+  completed: <CheckCircleOutlined style={{ color: "#52c41a" }} />,
+  failed: <CloseCircleOutlined style={{ color: "#ff4d4f" }} />,
+  skipped: <ExclamationCircleOutlined style={{ color: "#faad14" }} />,
+  waiting_approval: <PauseCircleOutlined style={{ color: "#faad14" }} />,
+};
 
 export default function TaskDetailPage() {
   const router = useRouter();
@@ -84,7 +96,30 @@ export default function TaskDetailPage() {
   if (!task) return <Text>任务不存在</Text>;
 
   const isPaused = task.status === "paused";
+  const isRunning = task.status === "running";
   const canRollback = ["running", "paused", "failed", "completed"].includes(task.status);
+
+  // 计算进度百分比
+  const progressPercent = useMemo(() => {
+    if (!task) return 0;
+    const total = task.step_executions.length;
+    if (total === 0) return 0;
+    const completed = task.step_executions.filter((s) =>
+      ["completed", "skipped"].includes(s.status)
+    ).length;
+    return Math.round((completed / total) * 100);
+  }, [task]);
+
+  // 步骤状态统计
+  const stepStats = useMemo(() => {
+    if (!task) return { completed: 0, running: 0, failed: 0, pending: 0 };
+    return {
+      completed: task.step_executions.filter((s) => s.status === "completed").length,
+      running: task.step_executions.filter((s) => s.status === "running").length,
+      failed: task.step_executions.filter((s) => s.status === "failed").length,
+      pending: task.step_executions.filter((s) => s.status === "pending").length,
+    };
+  }, [task]);
 
   return (
     <div>
@@ -127,6 +162,35 @@ export default function TaskDetailPage() {
           style={{ marginBottom: 16 }}
         />
       )}
+
+      {/* 进度卡片 */}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text strong>执行进度</Text>
+              <Text>{progressPercent}%</Text>
+            </div>
+            <Progress
+              percent={progressPercent}
+              status={task.status === "failed" ? "exception" : task.status === "completed" ? "success" : "active"}
+              strokeColor={task.status === "failed" ? "#ff4d4f" : undefined}
+            />
+            <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+              <Badge status="success" text={`完成: ${stepStats.completed}`} />
+              {stepStats.running > 0 && <Badge status="processing" text={`运行中: ${stepStats.running}`} />}
+              {stepStats.failed > 0 && <Badge status="error" text={`失败: ${stepStats.failed}`} />}
+              <Badge status="default" text={`待执行: ${stepStats.pending}`} />
+            </div>
+          </div>
+          {isRunning && (
+            <div style={{ textAlign: "center" }}>
+              <LoadingOutlined style={{ fontSize: 32, color: "#1677ff" }} spin />
+              <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>执行中...</div>
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card style={{ marginBottom: 24 }}>
         <Descriptions column={2}>
