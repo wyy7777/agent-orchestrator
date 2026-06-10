@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "Agent Orchestrator"
+    APP_VERSION: str = "0.2.0"
     DEBUG: bool = False
 
     # 数据库
@@ -31,6 +32,14 @@ class Settings(BaseSettings):
     # API 安全
     API_KEY: str = ""  # 可选：客户端 API Key，留空则不验证
     CORS_ORIGINS: str = "*"  # 逗号分隔的允许来源
+
+    # 速率限制
+    RATE_LIMIT: int = 60  # 每窗口最大请求数
+    RATE_WINDOW: int = 60  # 时间窗口（秒）
+
+    # YAML 解析默认值
+    DEFAULT_STEP_TIMEOUT: int = 300  # 步骤默认超时（秒）
+    DEFAULT_MAX_ITERATIONS: int = 10  # 循环默认最大迭代次数
 
     # AI 调用
     AI_MAX_RETRIES: int = 3

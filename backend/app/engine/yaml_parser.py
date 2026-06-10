@@ -5,6 +5,8 @@ from typing import Any
 
 import yaml
 
+from app.config import settings
+
 
 @dataclass
 class StepDefinition:
@@ -12,12 +14,12 @@ class StepDefinition:
     type: str  # analyze / execute / review / approval / merge / subtask / loop
     config: dict[str, Any] = field(default_factory=dict)
     prompt_template: str | None = None
-    timeout: int = 300  # 秒
+    timeout: int = field(default_factory=lambda: settings.DEFAULT_STEP_TIMEOUT)
     parallel: bool = False
     steps: list["StepDefinition"] = field(default_factory=list)  # loop 子步骤
     condition: str | None = None  # 条件表达式，如 "{result.score} > 80"
     loop_items: str | None = None  # 循环数据源 key
-    max_iterations: int = 10
+    max_iterations: int = field(default_factory=lambda: settings.DEFAULT_MAX_ITERATIONS)
     subtask_workflow: str | None = None  # 子工作流 ID
 
 
@@ -81,10 +83,10 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                         type=sub_type,
                         config=sub_data.get("config", {}),
                         prompt_template=sub_data.get("prompt_template"),
-                        timeout=sub_data.get("timeout", 300),
+                        timeout=sub_data.get("timeout", settings.DEFAULT_STEP_TIMEOUT),
                         condition=sub_data.get("condition"),
                         loop_items=sub_data.get("loop_items"),
-                        max_iterations=sub_data.get("max_iterations", 10),
+                        max_iterations=sub_data.get("max_iterations", settings.DEFAULT_MAX_ITERATIONS),
                         subtask_workflow=sub_data.get("subtask_workflow"),
                     )
                 )
@@ -95,12 +97,12 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                 type=step_type,
                 config=step_data.get("config", {}),
                 prompt_template=step_data.get("prompt_template"),
-                timeout=step_data.get("timeout", 300),
+                timeout=step_data.get("timeout", settings.DEFAULT_STEP_TIMEOUT),
                 parallel=step_data.get("parallel", False),
                 steps=sub_steps,
                 condition=step_data.get("condition"),
                 loop_items=step_data.get("loop_items"),
-                max_iterations=step_data.get("max_iterations", 10),
+                max_iterations=step_data.get("max_iterations", settings.DEFAULT_MAX_ITERATIONS),
                 subtask_workflow=step_data.get("subtask_workflow"),
             )
         )

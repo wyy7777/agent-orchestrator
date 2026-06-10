@@ -16,7 +16,7 @@ const { Title, Text } = Typography;
 
 export default function WorkflowDetailPage() {
   const router = useRouter();
-  const { id } = router.query;
+  const id = typeof router.query.id === "string" ? router.query.id : undefined;
   const [workflow, setWorkflow] = useState<WorkflowItem | null>(null);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,8 +30,8 @@ export default function WorkflowDetailPage() {
     setLoading(true);
     try {
       const [wf, tasksRes] = await Promise.all([
-        workflowApi.get(id as string, signal),
-        taskApi.list({ workflow_id: id as string, page_size: 20, signal }),
+        workflowApi.get(id, signal),
+        taskApi.list({ workflow_id: id, page_size: 20, signal }),
       ]);
       if (signal?.aborted) return;
       setWorkflow(wf);
@@ -57,7 +57,7 @@ export default function WorkflowDetailPage() {
     if (!id) return;
     setSaving(true);
     try {
-      await workflowApi.update(id as string, { yaml_definition: editYaml });
+      await workflowApi.update(id, { yaml_definition: editYaml });
       message.success("已更新");
       setEditModalOpen(false);
       load();
@@ -72,7 +72,7 @@ export default function WorkflowDetailPage() {
     if (!id) return;
     setTriggering(true);
     try {
-      const task = await taskApi.create({ workflow_id: id as string, trigger_type: "manual" });
+      const task = await taskApi.create({ workflow_id: id, trigger_type: "manual" });
       await taskApi.start(task.id);
       message.success("任务已创建");
       router.push(`/tasks/detail?id=${task.id}`);

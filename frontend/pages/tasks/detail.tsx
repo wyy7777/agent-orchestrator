@@ -18,7 +18,7 @@ const { Title, Text, Paragraph } = Typography;
 
 export default function TaskDetailPage() {
   const router = useRouter();
-  const { id } = router.query;
+  const id = typeof router.query.id === "string" ? router.query.id : undefined;
   const [task, setTask] = useState<TaskItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedStep, setSelectedStep] = useState<StepExecution | null>(null);
@@ -29,7 +29,7 @@ export default function TaskDetailPage() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const data = await taskApi.get(id as string);
+      const data = await taskApi.get(id);
       setTask(data);
     } catch (err) {
       message.error("加载失败");
@@ -44,7 +44,7 @@ export default function TaskDetailPage() {
 
   useEffect(() => {
     if (id) {
-      connectWebSocket(id as string);
+      connectWebSocket(id);
       const unsub = onMessage((data) => {
         if (data.type === "task_update" && data.task_id === id) {
           load();
@@ -60,7 +60,7 @@ export default function TaskDetailPage() {
   const handleRollback = async () => {
     if (!id) return;
     try {
-      await taskApi.rollback(id as string, rollbackStep);
+      await taskApi.rollback(id, rollbackStep);
       message.success("已回滚");
       setRollbackModalOpen(false);
       load();
@@ -72,7 +72,7 @@ export default function TaskDetailPage() {
   const handleResume = async () => {
     if (!id) return;
     try {
-      await taskApi.resume(id as string);
+      await taskApi.resume(id);
       message.success("已恢复执行");
       load();
     } catch (err) {

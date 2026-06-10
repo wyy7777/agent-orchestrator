@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Agent Orchestrator",
     description="企业级 AI Agent 工作流编排平台",
-    version="0.2.0",
+    version=settings.APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -126,10 +126,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 app.add_middleware(APIKeyMiddleware)
 
 
-# 简单的内存 Rate Limiter（每 IP 每分钟 60 次请求）
+# 简单的内存 Rate Limiter
 _rate_store: dict[str, list[float]] = defaultdict(list)
-RATE_LIMIT = 60
-RATE_WINDOW = 60  # 秒
 
 
 @app.middleware("http")
@@ -138,9 +136,21 @@ async def rate_limit_middleware(request: Request, call_next):
     if request.url.path.startswith("/ws") or request.url.path.startswith("/_next"):
         return await call_next(request)
 
+    # 获取客户端 IP：优先检查反向代理 header，并做基本验证
     client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    real_ip = request.headers.get("X-Real-IP")
+    if forwarded_for:
+        # X-Forwarded-For 可能包含多个 IP，取第一个（最初客户端）
+        first_ip = forwarded_for.split(",")[0].strip()
+        # 基本 IP 格式验证，防止伪造注入
+        if first_ip and all(c in "0123456789.:abcdefABCDEF" for c in first_ip):
+            client_ip = first_ip
+    elif real_ip and all(c in "0123456789.:abcdefABCDEF" for c in real_ip.strip()):
+        client_ip = real_ip.strip()
+
     now = time.time()
-    window_start = now - RATE_WINDOW
+    window_start = now - settings.RATE_WINDOW
 
     # 清理过期记录
     _rate_store[client_ip] = [t for t in _rate_store[client_ip] if t > window_start]
@@ -151,7 +161,7 @@ async def rate_limit_middleware(request: Request, call_next):
         for ip in empty_ips:
             del _rate_store[ip]
 
-    if len(_rate_store[client_ip]) >= RATE_LIMIT:
+    if len(_rate_store[client_ip]) >= settings.RATE_LIMIT:
         return JSONResponse(
             status_code=429,
             content={"detail": "请求过于频繁，请稍后再试"},
@@ -180,7 +190,7 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str | None = None):
 async def health():
     return {
         "status": "ok",
-        "version": "0.2.0",
+        "version": settings.APP_VERSION,
     }
 
 

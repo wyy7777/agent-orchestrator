@@ -1,4 +1,4 @@
-import asyncio
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +12,8 @@ from app.models.task import Task
 from app.schemas.approval import ApprovalCreate, ApprovalListResponse, ApprovalResponse
 from app.engine.state_machine import ExecutionEngine
 from app.services.ws_manager import ws_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
 
@@ -71,8 +73,11 @@ async def decide_approval(
 
         await db.commit()
 
-        # 异步恢复执行（在新的 session 中）
-        asyncio.create_task(_resume_task(task_id))
+        # 同步等待任务恢复完成，确保异常被捕获和记录
+        try:
+            await _resume_task(task_id)
+        except Exception as e:
+            logger.error(f"恢复任务 {task_id} 失败: {e}", exc_info=True)
 
     elif body.status == "rejected" and step_exec:
         step_exec.status = "failed"
@@ -100,11 +105,7 @@ async def decide_approval(
 
 async def _resume_task(task_id: str):
     """在新的数据库 session 中恢复任务执行。"""
-    try:
-        async with async_session() as db:
-            engine = ExecutionEngine(db)
-            task = await engine.resume_task(task_id)
-            await ws_manager.broadcast_task_update(task_id, {"status": task.status})
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"恢复任务 {task_id} 失败: {e}")
+    async with async_session() as db:
+        engine = ExecutionEngine(db)
+        task = await engine.resume_task(task_id)
+        await ws_manager.broadcast_task_update(task_id, {"status": task.status})
