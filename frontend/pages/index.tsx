@@ -285,7 +285,7 @@ export default function DashboardPage() {
           </Row>
         </div>
       ) : (
-      <>
+      <> {/* 基础统计卡片 */}
         {/* 基础统计卡片 */}
         <DashboardStats stats={stats} />
 
@@ -447,6 +447,7 @@ export default function DashboardPage() {
             />
           )}
         </Card>
+      </>
       )}
 
       {/* 欢迎弹窗 - 首次访问 */}

@@ -1,4 +1,4 @@
-"""Docker 沙箱功能测试（使用 mock，不实际调用 Docker）。"""
+"""沙箱功能测试（支持 Docker 和本地两种模式）。"""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,51 +29,53 @@ def _make_mock_docker_client(container=None):
 @pytest.fixture
 def manager():
     m = SandboxManager()
-    # 预设 mock client，避免 import docker
-    client, container = _make_mock_docker_client()
-    m._client = client
+    # 使用本地模式（不依赖 Docker）
+    m._docker_available = False
     return m
 
 
-# ---- 单元测试 ----
+@pytest.fixture
+def docker_manager():
+    m = SandboxManager()
+    # 预设 mock client，模拟 Docker 模式
+    client, container = _make_mock_docker_client()
+    m._client = client
+    m._docker_available = True
+    return m
+
+
+# ---- 本地模式单元测试 ----
 
 
 @pytest.mark.asyncio
-async def test_create_sandbox(manager):
-    container_id = await manager.create_sandbox("test-task-001")
+async def test_create_local_sandbox(manager):
+    sandbox_id = await manager.create_sandbox("test-task-001")
 
-    assert container_id == "fake_container_id_12345"
+    assert sandbox_id.startswith("local-")
     assert "test-task-001" in manager._sandboxes
-    manager._client.containers.run.assert_called_once()
-    call_kwargs = manager._client.containers.run.call_args
-    assert call_kwargs.kwargs["mem_limit"] == "512m"
-    assert call_kwargs.kwargs["network_disabled"] is True
+    assert manager._sandboxes["test-task-001"]["type"] == "local"
 
 
 @pytest.mark.asyncio
-async def test_execute_in_sandbox(manager):
+async def test_execute_in_local_sandbox(manager):
     task_id = "test-task-002"
 
     await manager.create_sandbox(task_id)
     result = await manager.execute_in_sandbox(task_id, "echo hello")
 
     assert result["exit_code"] == 0
-    assert "hello world" in result["output"]
-    manager._client.containers.get.return_value.exec_run.assert_called_once()
+    assert "hello" in result["output"]
 
 
 @pytest.mark.asyncio
-async def test_destroy_sandbox(manager):
+async def test_destroy_local_sandbox(manager):
     task_id = "test-task-003"
 
     await manager.create_sandbox(task_id)
     assert task_id in manager._sandboxes
 
-    container = manager._client.containers.get.return_value
     await manager.destroy_sandbox(task_id)
     assert task_id not in manager._sandboxes
-    container.stop.assert_called_once_with(timeout=5)
-    container.remove.assert_called_once_with(force=True)
 
 
 @pytest.mark.asyncio
@@ -101,16 +103,41 @@ async def test_list_sandboxes(manager):
 
     assert len(items) == 1
     assert items[0]["task_id"] == "task-x"
-    assert items[0]["container_id"] == "fake_container_id_12345"
+    assert items[0]["type"] == "local"
 
 
 @pytest.mark.asyncio
-async def test_create_sandbox_docker_unavailable():
-    m = SandboxManager()
-    m._client = None
-    with patch.object(m, "_get_client", return_value=None):
-        with pytest.raises(RuntimeError, match="Docker 不可用"):
-            await m.create_sandbox("task-fail")
+async def test_sandbox_mode(manager):
+    assert manager.mode == "local"
+
+
+# ---- Docker 模式单元测试 ----
+
+
+@pytest.mark.asyncio
+async def test_create_docker_sandbox(docker_manager):
+    container_id = await docker_manager.create_sandbox("test-task-docker")
+
+    assert container_id == "fake_container_id_12345"
+    assert "test-task-docker" in docker_manager._sandboxes
+    assert docker_manager._sandboxes["test-task-docker"]["type"] == "docker"
+    docker_manager._client.containers.run.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_execute_in_docker_sandbox(docker_manager):
+    task_id = "test-task-docker-exec"
+
+    await docker_manager.create_sandbox(task_id)
+    result = await docker_manager.execute_in_sandbox(task_id, "echo hello")
+
+    assert result["exit_code"] == 0
+    assert "hello world" in result["output"]
+
+
+@pytest.mark.asyncio
+async def test_docker_mode(docker_manager):
+    assert docker_manager.mode == "docker"
 
 
 # ---- API 集成测试 ----

@@ -108,8 +108,11 @@ async def test_get_me(client):
 
 @pytest.mark.asyncio
 async def test_get_me_no_token(client):
+    # 单用户模式：无 token 时返回默认用户
     resp = await client.get("/api/auth/me")
-    assert resp.status_code in (401, 403)  # HTTPBearer 返回 401 或 403
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["username"] == "local"  # 默认用户
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+    remember_me: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -32,3 +33,4 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: str | None = None

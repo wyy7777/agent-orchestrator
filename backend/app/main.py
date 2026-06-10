@@ -54,6 +54,10 @@ async def _create_demo_data():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 确保 SECRET_KEY 已配置
+    from app.auth import ensure_secret_key
+    ensure_secret_key()
+
     logger.info("正在初始化数据库...")
     await init_db()
 

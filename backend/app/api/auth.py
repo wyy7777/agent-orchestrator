@@ -1,19 +1,26 @@
 from datetime import datetime, timezone
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
+    check_login_rate_limit,
+    clear_login_failures,
     create_access_token,
+    create_refresh_token,
     get_current_user,
     hash_password,
+    record_login_failure,
     require_admin,
     verify_password,
 )
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserLogin, UserResponse, UserUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["认证"])
 
@@ -46,17 +53,79 @@ async def register(body: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/api/auth/login", response_model=Token)
-async def login(body: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(body: UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
+    # 登录频率限制
+    client_ip = request.client.host if request.client else "unknown"
+    if not check_login_rate_limit(client_ip):
+        logger.warning(f"登录频率限制: {client_ip}")
+        raise HTTPException(
+            status_code=429,
+            detail="登录尝试次数过多，请 15 分钟后再试",
+        )
+
     result = await db.execute(select(User).where(User.username == body.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(body.password, user.hashed_password):
+        record_login_failure(client_ip)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="账号已被禁用")
 
+    # 登录成功，清除失败记录
+    clear_login_failures(client_ip)
+
     user.last_login = datetime.now(timezone.utc)
-    token = create_access_token({"sub": user.id})
-    return {"access_token": token, "token_type": "bearer"}
+
+    # 根据 remember_me 设置 token 有效期
+    if body.remember_me:
+        access_token = create_access_token(
+            {"sub": user.id},
+            expires_delta=None,  # 使用默认有效期
+        )
+        refresh_token = create_refresh_token({"sub": user.id})
+    else:
+        access_token = create_access_token({"sub": user.id})
+        refresh_token = None
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token,
+    }
+
+
+@router.post("/api/auth/refresh", response_model=Token)
+async def refresh_token(
+    refresh_token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """使用 refresh token 获取新的 access token。"""
+    from jose import JWTError, jwt
+    from app.config import settings
+
+    try:
+        payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=["HS256"])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="无效的 refresh token")
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="无效的 refresh token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="refresh token 已过期或无效")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="用户不存在或已被禁用")
+
+    new_access_token = create_access_token({"sub": user.id})
+    new_refresh_token = create_refresh_token({"sub": user.id})
+
+    return {
+        "access_token": new_access_token,
+        "token_type": "bearer",
+        "refresh_token": new_refresh_token,
+    }
 
 
 @router.get("/api/auth/me", response_model=UserResponse)
