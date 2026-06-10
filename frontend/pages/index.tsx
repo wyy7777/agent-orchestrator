@@ -1,10 +1,16 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { Typography, Spin, message, Card, Table, Tag, Button, Space, Row, Col, Empty } from "antd";
+import { Typography, Spin, message, Card, Table, Tag, Button, Space, Row, Col, Empty, Alert, List, Modal } from "antd";
 import {
   PlusOutlined,
   ReloadOutlined,
   RocketOutlined,
   DownloadOutlined,
+  BugOutlined,
+  EyeOutlined,
+  SafetyOutlined,
+  ThunderboltOutlined,
+  ImportOutlined,
+  BellOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { Line, Pie, Column } from "@ant-design/charts";
@@ -14,7 +20,38 @@ import type { DashboardStatsData, TaskItem, WorkflowItem } from "@/lib/api";
 import { statusColors } from "@/lib/constants";
 import { useI18n } from "@/lib/i18n";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
+
+/** 用例卡片数据 */
+const USE_CASES = [
+  {
+    icon: <BugOutlined style={{ fontSize: 32, color: "#ff4d4f" }} />,
+    title: "自动修 Bug",
+    titleEn: "Auto Fix Bugs",
+    desc: "贴 Issue 链接 → AI 分析 → 你审批 → AI 修复 → 自动发 PR",
+    descEn: "Paste Issue link → AI analyzes → You approve → AI fixes → Auto PR",
+    time: "5 min",
+    color: "#fff1f0",
+  },
+  {
+    icon: <EyeOutlined style={{ fontSize: 32, color: "#1677ff" }} />,
+    title: "代码审查",
+    titleEn: "Code Review",
+    desc: "贴 PR 链接 → AI 审查 → 生成质量报告 → 发评论",
+    descEn: "Paste PR link → AI reviews → Quality report → Post comments",
+    time: "3 min",
+    color: "#e6f4ff",
+  },
+  {
+    icon: <SafetyOutlined style={{ fontSize: 32, color: "#52c41a" }} />,
+    title: "安全扫描",
+    titleEn: "Security Scan",
+    desc: "一键扫描代码 → 发现漏洞 → 生成报告 → 告警通知",
+    descEn: "One-click scan → Find vulnerabilities → Report → Alert",
+    time: "2 min",
+    color: "#f6ffed",
+  },
+];
 
 /** 最近 N 天的日期标签 */
 function recentDays(n: number): string[] {
@@ -33,6 +70,8 @@ export default function DashboardPage() {
   const [workflows, setWorkflows] = useState<Record<string, WorkflowItem>>({});
   const [allTasks, setAllTasks] = useState<TaskItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [showWelcome, setShowWelcome] = useState(false);
   const router = useRouter();
   const { t, locale } = useI18n();
 
@@ -69,6 +108,29 @@ export default function DashboardPage() {
     loadData(controller.signal);
     return () => controller.abort();
   }, []);
+
+  // 检查待审批任务数量
+  useEffect(() => {
+    if (stats && stats.pending_approvals > 0) {
+      setPendingApprovals(stats.pending_approvals);
+      // 浏览器通知
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Agent Orchestrator", {
+          body: `有 ${stats.pending_approvals} 个任务等待你的审批`,
+          icon: "/favicon.ico",
+        });
+      }
+    }
+  }, [stats]);
+
+  // 首次访问显示欢迎弹窗
+  useEffect(() => {
+    const hasVisited = localStorage.getItem("hasVisited");
+    if (!hasVisited && !loading) {
+      setShowWelcome(true);
+      localStorage.setItem("hasVisited", "true");
+    }
+  }, [loading]);
 
   const handleRefresh = () => {
     loadData();
@@ -150,8 +212,42 @@ export default function DashboardPage() {
     message.success("导出成功");
   }, [allTasks, workflows]);
 
+  // 一键导入示例工作流
+  const importDemo = async () => {
+    try {
+      await workflowApi.importTemplate(0);
+      message.success(locale === "zh" ? "导入成功！" : "Imported successfully!");
+      loadData();
+    } catch {
+      message.error(locale === "zh" ? "导入失败" : "Import failed");
+    }
+  };
+
   return (
     <div>
+      {/* 待审批提醒横幅 */}
+      {pendingApprovals > 0 && (
+        <Alert
+          message={
+            <span>
+              <BellOutlined />{" "}
+              {locale === "zh"
+                ? `有 ${pendingApprovals} 个任务等待你的审批`
+                : `${pendingApprovals} tasks waiting for your approval`}
+            </span>
+          }
+          type="warning"
+          showIcon={false}
+          banner
+          style={{ marginBottom: 16 }}
+          action={
+            <Button size="small" type="primary" onClick={() => router.push("/approvals")}>
+              {locale === "zh" ? "去审批" : "Review Now"}
+            </Button>
+          }
+        />
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
         <Title level={3}>{t("dashboard.title")}</Title>
         <Space>
@@ -327,6 +423,64 @@ export default function DashboardPage() {
           )}
         </Card>
       </Spin>
+
+      {/* 欢迎弹窗 - 首次访问 */}
+      <Modal
+        title={
+          <span>
+            <RocketOutlined />{" "}
+            {locale === "zh" ? "欢迎使用 Agent Orchestrator" : "Welcome to Agent Orchestrator"}
+          </span>
+        }
+        open={showWelcome}
+        onCancel={() => setShowWelcome(false)}
+        footer={null}
+        width={640}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text>
+            {locale === "zh"
+              ? "AI Agent 工作流编排平台 — 让 AI 可靠、可控、可审计。"
+              : "AI Agent workflow orchestration platform — make AI reliable, controllable, and auditable."}
+          </Text>
+        </div>
+
+        <Title level={5}>{locale === "zh" ? "快速开始" : "Quick Start"}</Title>
+        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+          {USE_CASES.map((uc, i) => (
+            <Col span={8} key={i}>
+              <Card
+                hoverable
+                style={{ background: uc.color, textAlign: "center" }}
+                onClick={() => {
+                  setShowWelcome(false);
+                  router.push("/workflows");
+                }}
+              >
+                <div>{uc.icon}</div>
+                <div style={{ fontWeight: 600, marginTop: 8 }}>
+                  {locale === "zh" ? uc.title : uc.titleEn}
+                </div>
+                <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                  {locale === "zh" ? uc.desc : uc.descEn}
+                </div>
+                <Tag color="blue" style={{ marginTop: 8 }}>
+                  {uc.time}
+                </Tag>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+
+        <Space>
+          <Button type="primary" icon={<ImportOutlined />} onClick={() => { setShowWelcome(false); importDemo(); }}>
+            {locale === "zh" ? "一键导入示例工作流" : "Import Demo Workflow"}
+          </Button>
+          <Button icon={<PlusOutlined />} onClick={() => { setShowWelcome(false); router.push("/workflows/new"); }}>
+            {locale === "zh" ? "创建第一个工作流" : "Create First Workflow"}
+          </Button>
+        </Space>
+      </Modal>
     </div>
   );
 }

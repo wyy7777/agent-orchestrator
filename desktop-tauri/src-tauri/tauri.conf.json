@@ -35,6 +35,10 @@
     ],
     "security": {
       "csp": "default-src 'self'; connect-src http://127.0.0.1:18000 ws://127.0.0.1:18000 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    },
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
     }
   },
   "plugins": {
@@ -46,6 +50,12 @@
         "https://github.com/reasonix/agent-orchestrator/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM3ODgyOTZBMjQ5NUU5QkpSV1NiWGttaWxvSjRESmVsMU1EbHpwWnVMdXpXRkFEay8ydkwwZE8wbkxnY0hLeDJibU9oUVFKNgo="
+    },
+    "autostart": {
+      "args": ["--minimized"]
+    },
+    "global-shortcut": {
+      "shortcuts": ["CmdOrCtrl+Shift+O"]
     }
   }
 }

@@ -154,3 +154,84 @@ async def validate_yaml(body: dict):
     yaml_content = body.get("yaml_content", "")
     valid, error = validate_workflow_yaml(yaml_content)
     return {"valid": valid, "error": error}
+
+
+# === 工作流分享 ===
+
+import base64
+import hashlib
+from datetime import datetime
+
+
+@router.get("/{workflow_id}/share")
+async def share_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
+    """生成工作流分享链接。"""
+    result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+    workflow = result.scalar_one_or_none()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+
+    # 将 YAML 内容编码为 base64
+    yaml_bytes = workflow.yaml_definition.encode("utf-8")
+    encoded = base64.urlsafe_b64encode(yaml_bytes).decode("ascii")
+
+    return {
+        "workflow_id": workflow.id,
+        "name": workflow.name,
+        "description": workflow.description,
+        "share_code": encoded,
+        "share_url": f"/workflows/import?code={encoded}",
+    }
+
+
+@router.post("/import-share")
+async def import_shared_workflow(body: dict, db: AsyncSession = Depends(get_db)):
+    """从分享代码导入工作流。"""
+    share_code = body.get("share_code", "")
+    if not share_code:
+        raise HTTPException(status_code=400, detail="分享代码不能为空")
+
+    try:
+        yaml_bytes = base64.urlsafe_b64decode(share_code)
+        yaml_content = yaml_bytes.decode("utf-8")
+    except Exception:
+        raise HTTPException(status_code=400, detail="无效的分享代码")
+
+    valid, error = validate_workflow_yaml(yaml_content)
+    if not valid:
+        raise HTTPException(status_code=400, detail=f"工作流格式错误: {error}")
+
+    # 解析名称
+    try:
+        data = yaml.safe_load(yaml_content)
+        name = data.get("name", f"导入的工作流_{datetime.now().strftime('%H%M%S')}")
+        description = data.get("description", "")
+    except Exception:
+        name = f"导入的工作流_{datetime.now().strftime('%H%M%S')}"
+        description = ""
+
+    workflow = Workflow(
+        name=name,
+        description=description,
+        yaml_definition=yaml_content,
+    )
+    db.add(workflow)
+    await db.flush()
+    await db.refresh(workflow)
+    return workflow
+
+
+@router.get("/export/{workflow_id}")
+async def export_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
+    """导出工作流 YAML 文件。"""
+    result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+    workflow = result.scalar_one_or_none()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="工作流不存在")
+
+    return {
+        "name": workflow.name,
+        "description": workflow.description,
+        "yaml": workflow.yaml_definition,
+        "filename": f"{workflow.name.replace(' ', '_')}.yaml",
+    }

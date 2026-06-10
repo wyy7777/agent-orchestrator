@@ -44,6 +44,26 @@ def _try_parse_json(content: str) -> dict[str, Any] | None:
         return None
 
 
+def _get_friendly_error(error: Exception) -> str:
+    """将技术错误转换为用户友好的提示。"""
+    error_str = str(error).lower()
+
+    if "api key" in error_str or "apikey" in error_str or "unauthorized" in error_str:
+        return "API Key 无效或已过期，请在 .env 中更新 OPENAI_API_KEY 或 ANTHROPIC_API_KEY"
+    if "rate limit" in error_str or "429" in error_str:
+        return "API 请求频率超限，请稍后再试"
+    if "timeout" in error_str or "timed out" in error_str:
+        return "AI 响应超时，可使用更小的模型或增加超时时间重试"
+    if "connection" in error_str or "network" in error_str:
+        return "无法连接到 AI 服务，请检查网络连接"
+    if "model" in error_str and "not found" in error_str:
+        return "指定的模型不存在，请检查配置中的模型名称"
+    if "token" in error_str and "limit" in error_str:
+        return "已达到 Token 上限，请升级套餐或等待下月重置"
+
+    return f"AI 调用失败: {error}"
+
+
 async def _retry_with_backoff(coro_factory, max_retries: int = 0, label: str = ""):
     """带指数退避的重试包装器。coro_factory 是返回 coroutine 的工厂函数。"""
     max_retries = max_retries or settings.AI_MAX_RETRIES

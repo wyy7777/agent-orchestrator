@@ -1,5 +1,5 @@
 import React from "react";
-import { Card, Col, Row, Statistic, Tag } from "antd";
+import { Card, Col, Row, Statistic, Tag, Tooltip } from "antd";
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -7,6 +7,7 @@ import {
   ClockCircleOutlined,
   ThunderboltOutlined,
   AuditOutlined,
+  DollarOutlined,
 } from "@ant-design/icons";
 import type { DashboardStatsData } from "@/lib/api";
 
@@ -15,8 +16,14 @@ interface Props {
   loading?: boolean;
 }
 
+// DeepSeek 定价估算 (每 1M tokens)
+const COST_PER_MILLION_TOKENS = 0.14; // DeepSeek-chat 价格
+
 export default function DashboardStats({ stats, loading }: Props) {
   if (!stats) return null;
+
+  // 估算费用 (基于 DeepSeek 定价)
+  const estimatedCost = (stats.total_tokens_used / 1_000_000) * COST_PER_MILLION_TOKENS;
 
   return (
     <Row gutter={[16, 16]}>
@@ -92,12 +99,15 @@ export default function DashboardStats({ stats, loading }: Props) {
       </Col>
       <Col xs={24} sm={12} md={6}>
         <Card hoverable>
-          <Statistic
-            title="审批通过率"
-            value={stats.avg_approval_pass_rate}
-            suffix="%"
-            prefix={<AuditOutlined />}
-          />
+          <Tooltip title="基于 DeepSeek 定价估算">
+            <Statistic
+              title="预估费用"
+              value={estimatedCost}
+              prefix={<DollarOutlined />}
+              precision={2}
+              valueStyle={{ color: "#722ed1" }}
+            />
+          </Tooltip>
         </Card>
       </Col>
     </Row>

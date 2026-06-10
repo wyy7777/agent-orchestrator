@@ -2,6 +2,17 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 const REQUEST_TIMEOUT = 30000; // 30 秒
 
+/** 友好的错误提示 */
+function getFriendlyError(status: number, detail: string): string {
+  if (status === 401) return "认证失败，请重新登录";
+  if (status === 403) return "权限不足，请联系管理员";
+  if (status === 404) return "请求的资源不存在";
+  if (status === 422) return "请求参数错误，请检查输入";
+  if (status === 429) return "请求过于频繁，请稍后再试";
+  if (status >= 500) return "服务器错误，请稍后再试";
+  return detail || `请求失败: ${status}`;
+}
+
 async function request<T>(
   path: string,
   options?: RequestInit & { signal?: AbortSignal }
@@ -31,7 +42,7 @@ async function request<T>(
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || `请求失败: ${res.status}`);
+      throw new Error(getFriendlyError(res.status, err.detail));
     }
     if (res.status === 204) return undefined as T;
     return res.json();
@@ -84,6 +95,19 @@ export const workflowApi = {
     ),
   importTemplate: (index: number) =>
     request<WorkflowItem>(`/api/workflows/templates/${index}`, { method: "POST" }),
+  share: (id: string) =>
+    request<{ workflow_id: string; name: string; share_code: string; share_url: string }>(
+      `/api/workflows/${id}/share`
+    ),
+  importShare: (share_code: string) =>
+    request<WorkflowItem>("/api/workflows/import-share", {
+      method: "POST",
+      body: JSON.stringify({ share_code }),
+    }),
+  export: (id: string) =>
+    request<{ name: string; yaml: string; filename: string }>(
+      `/api/workflows/export/${id}`
+    ),
 };
 
 // === Task ===

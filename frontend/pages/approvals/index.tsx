@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Typography, Card, Space, Tag, Button, message, Empty, Descriptions, Popconfirm } from "antd";
-import { ReloadOutlined, CheckOutlined, CloseOutlined } from "@ant-design/icons";
+import { Typography, Card, Space, Tag, Button, message, Empty, Descriptions, Popconfirm, Row, Col } from "antd";
+import { ReloadOutlined, CheckOutlined, CloseOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { approvalApi } from "@/lib/api";
 import type { ApprovalItem } from "@/lib/api";
 
@@ -9,6 +9,17 @@ const { Title, Text } = Typography;
 export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // 检测是否为移动设备
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const load = async (signal?: AbortSignal) => {
     setLoading(true);
@@ -72,18 +83,35 @@ export default function ApprovalsPage() {
                   <Text>审批 ID: {approval.id.substring(0, 8)}...</Text>
                 </Space>
               }
-              extra={
-                <Space>
+            >
+              <Descriptions column={isMobile ? 1 : 2} size="small">
+                <Descriptions.Item label="审批 ID">{approval.id}</Descriptions.Item>
+                <Descriptions.Item label="步骤执行 ID">{approval.step_execution_id}</Descriptions.Item>
+                <Descriptions.Item label="创建时间">
+                  <ClockCircleOutlined /> {new Date(approval.created_at).toLocaleString("zh-CN")}
+                </Descriptions.Item>
+              </Descriptions>
+
+              {/* 移动端大按钮 */}
+              <Row gutter={12} style={{ marginTop: 16 }}>
+                <Col span={12}>
                   <Popconfirm
                     title="确定批准吗？"
                     onConfirm={() => handleDecide(approval.id, "approved")}
                     okText="批准"
                     cancelText="取消"
                   >
-                    <Button type="primary" icon={<CheckOutlined />} size="small">
+                    <Button
+                      type="primary"
+                      icon={<CheckOutlined />}
+                      block
+                      size={isMobile ? "large" : "middle"}
+                    >
                       批准
                     </Button>
                   </Popconfirm>
+                </Col>
+                <Col span={12}>
                   <Popconfirm
                     title="确定拒绝吗？"
                     onConfirm={() => handleDecide(approval.id, "rejected")}
@@ -91,20 +119,17 @@ export default function ApprovalsPage() {
                     cancelText="取消"
                     okButtonProps={{ danger: true }}
                   >
-                    <Button danger icon={<CloseOutlined />} size="small">
+                    <Button
+                      danger
+                      icon={<CloseOutlined />}
+                      block
+                      size={isMobile ? "large" : "middle"}
+                    >
                       拒绝
                     </Button>
                   </Popconfirm>
-                </Space>
-              }
-            >
-              <Descriptions column={2} size="small">
-                <Descriptions.Item label="审批 ID">{approval.id}</Descriptions.Item>
-                <Descriptions.Item label="步骤执行 ID">{approval.step_execution_id}</Descriptions.Item>
-                <Descriptions.Item label="创建时间">
-                  {new Date(approval.created_at).toLocaleString("zh-CN")}
-                </Descriptions.Item>
-              </Descriptions>
+                </Col>
+              </Row>
             </Card>
           ))}
         </Space>

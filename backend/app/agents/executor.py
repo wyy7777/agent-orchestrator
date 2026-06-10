@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import AgentResponse, get_agent
+from app.agents.base import AgentResponse, get_agent, _get_friendly_error
 from app.config import settings
 from app.engine.state_machine import StepHandler, register_handler
 from app.engine.yaml_parser import StepDefinition
@@ -51,7 +51,10 @@ class AnalyzeHandler(StepHandler):
         )
         user_prompt = prompt_template.format(issue=issue_body, code=code_context)
 
-        response = await agent.run(SYSTEM_PROMPT_ANALYZE, user_prompt)
+        try:
+            response = await agent.run(SYSTEM_PROMPT_ANALYZE, user_prompt)
+        except Exception as e:
+            raise RuntimeError(_get_friendly_error(e)) from e
 
         return {
             "analysis": response.parsed or {"raw": response.content},
@@ -108,7 +111,10 @@ class ExecuteHandler(StepHandler):
             plan=str(analysis), code=code_context
         )
 
-        response = await agent.run(SYSTEM_PROMPT_EXECUTE, user_prompt)
+        try:
+            response = await agent.run(SYSTEM_PROMPT_EXECUTE, user_prompt)
+        except Exception as e:
+            raise RuntimeError(_get_friendly_error(e)) from e
         changes = response.parsed or {"raw": response.content}
 
         # 如果配置了 GitHub token 和仓库，则实际写入文件
@@ -212,7 +218,10 @@ class ReviewHandler(StepHandler):
         prompt_template = step.prompt_template or "## 代码改动\n{changes}"
         user_prompt = prompt_template.format(changes=str(changes))
 
-        response = await agent.run(SYSTEM_PROMPT_REVIEW, user_prompt)
+        try:
+            response = await agent.run(SYSTEM_PROMPT_REVIEW, user_prompt)
+        except Exception as e:
+            raise RuntimeError(_get_friendly_error(e)) from e
 
         return {
             "review": response.parsed or {"raw": response.content},

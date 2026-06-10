@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { Typography, Form, Input, Button, Card, message, Space } from "antd";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Typography, Form, Input, Button, Card, message, Space, Tag, Tooltip } from "antd";
 import { useRouter } from "next/router";
 import { workflowApi } from "@/lib/api";
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined } from "@ant-design/icons";
 import dynamic from "next/dynamic";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -48,7 +49,44 @@ export default function NewWorkflowPage() {
   const [form] = Form.useForm();
   const [yaml, setYaml] = useState(EXAMPLE_YAML);
   const [saving, setSaving] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<"idle" | "validating" | "valid" | "invalid">("idle");
+  const [validationError, setValidationError] = useState<string | null>(null);
   const router = useRouter();
+  const validateTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 实时 YAML 校验（防抖 500ms）
+  const validateYaml = useCallback(async (content: string) => {
+    if (!content.trim()) {
+      setValidationStatus("idle");
+      setValidationError(null);
+      return;
+    }
+    setValidationStatus("validating");
+    try {
+      const result = await workflowApi.validate(content);
+      if (result.valid) {
+        setValidationStatus("valid");
+        setValidationError(null);
+      } else {
+        setValidationStatus("invalid");
+        setValidationError(result.error);
+      }
+    } catch {
+      setValidationStatus("idle");
+    }
+  }, []);
+
+  const handleYamlChange = useCallback((value: string) => {
+    setYaml(value);
+    if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
+    validateTimerRef.current = setTimeout(() => validateYaml(value), 500);
+  }, [validateYaml]);
+
+  useEffect(() => {
+    return () => {
+      if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
+    };
+  }, []);
 
   const handleSave = async () => {
     try {
@@ -88,13 +126,36 @@ export default function NewWorkflowPage() {
         </Form>
       </Card>
 
-      <Card title="YAML 定义" style={{ marginBottom: 24 }}>
-        <div style={{ border: "1px solid #d9d9d9", borderRadius: 8, overflow: "hidden" }}>
+      <Card
+        title={
+          <Space>
+            <span>YAML 定义</span>
+            {validationStatus === "validating" && <LoadingOutlined style={{ color: "#1677ff" }} />}
+            {validationStatus === "valid" && (
+              <Tooltip title="格式正确">
+                <CheckCircleOutlined style={{ color: "#52c41a" }} />
+              </Tooltip>
+            )}
+            {validationStatus === "invalid" && (
+              <Tooltip title={validationError}>
+                <CloseCircleOutlined style={{ color: "#ff4d4f" }} />
+              </Tooltip>
+            )}
+          </Space>
+        }
+        style={{ marginBottom: 24 }}
+      >
+        {validationStatus === "invalid" && validationError && (
+          <div style={{ marginBottom: 8, padding: "8px 12px", background: "#fff2f0", borderRadius: 4, color: "#ff4d4f" }}>
+            ❌ {validationError}
+          </div>
+        )}
+        <div style={{ border: `1px solid ${validationStatus === "invalid" ? "#ff4d4f" : "#d9d9d9"}`, borderRadius: 8, overflow: "hidden" }}>
           <MonacoEditor
             height="400px"
             language="yaml"
             value={yaml}
-            onChange={(v) => setYaml(v || "")}
+            onChange={(v) => handleYamlChange(v || "")}
             options={{
               minimap: { enabled: false },
               fontSize: 14,
@@ -107,7 +168,12 @@ export default function NewWorkflowPage() {
       </Card>
 
       <Space>
-        <Button type="primary" loading={saving} onClick={handleSave}>
+        <Button
+          type="primary"
+          loading={saving}
+          disabled={validationStatus === "invalid"}
+          onClick={handleSave}
+        >
           创建工作流
         </Button>
         <Button onClick={() => router.push("/workflows")}>取消</Button>

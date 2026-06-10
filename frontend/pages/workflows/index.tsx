@@ -77,13 +77,21 @@ export default function WorkflowListPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
         <Title level={3}>工作流管理</Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => router.push("/workflows/new")}
-        >
-          新建工作流
-        </Button>
+        <Space>
+          <Button
+            icon={<ImportOutlined />}
+            onClick={() => router.push("/workflows/import")}
+          >
+            导入工作流
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => router.push("/workflows/new")}
+          >
+            新建工作流
+          </Button>
+        </Space>
       </div>
 
       {workflows.length === 0 && !loading && templates.length > 0 ? (

@@ -43,6 +43,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.no": "否",
     "common.all": "全部",
     "common.none": "无",
+    "common.dark_mode": "暗色模式",
+    "common.light_mode": "亮色模式",
 
     // 导航
     "nav.dashboard": "仪表盘",
@@ -147,6 +149,21 @@ const translations: Record<Locale, Record<string, string>> = {
     "search.tokens_used": "Token 消耗",
     "search.asc": "升序",
     "search.desc": "降序",
+
+    // 欢迎
+    "welcome.title": "欢迎使用 Agent Orchestrator",
+    "welcome.desc": "AI Agent 工作流编排平台 — 让 AI 可靠、可控、可审计。",
+    "welcome.quick_start": "快速开始",
+    "welcome.import_demo": "一键导入示例工作流",
+    "welcome.create_first": "创建第一个工作流",
+    "welcome.auto_fix": "自动修 Bug",
+    "welcome.code_review": "代码审查",
+    "welcome.security_scan": "安全扫描",
+
+    // 通知
+    "notification.pending": "待审批",
+    "notification.browser": "浏览器通知",
+    "notification.request_permission": "开启通知",
   },
   en: {
     // Common
@@ -170,6 +187,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "common.no": "No",
     "common.all": "All",
     "common.none": "None",
+    "common.dark_mode": "Dark Mode",
+    "common.light_mode": "Light Mode",
 
     // Navigation
     "nav.dashboard": "Dashboard",
@@ -274,6 +293,21 @@ const translations: Record<Locale, Record<string, string>> = {
     "search.tokens_used": "Tokens Used",
     "search.asc": "Ascending",
     "search.desc": "Descending",
+
+    // Welcome
+    "welcome.title": "Welcome to Agent Orchestrator",
+    "welcome.desc": "AI Agent workflow orchestration platform — make AI reliable, controllable, and auditable.",
+    "welcome.quick_start": "Quick Start",
+    "welcome.import_demo": "Import Demo Workflow",
+    "welcome.create_first": "Create First Workflow",
+    "welcome.auto_fix": "Auto Fix Bugs",
+    "welcome.code_review": "Code Review",
+    "welcome.security_scan": "Security Scan",
+
+    // Notification
+    "notification.pending": "Pending",
+    "notification.browser": "Browser Notification",
+    "notification.request_permission": "Enable Notifications",
   },
 };
 

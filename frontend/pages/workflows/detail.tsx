@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
   Typography, Card, Descriptions, Tag, Button, Space, message, Spin,
-  Modal, Table,
+  Modal, Table, Tooltip,
 } from "antd";
-import { EditOutlined, PlayCircleOutlined, ArrowLeftOutlined } from "@ant-design/icons";
+import { EditOutlined, PlayCircleOutlined, ArrowLeftOutlined, ShareAltOutlined, DownloadOutlined, CopyOutlined } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { workflowApi, taskApi } from "@/lib/api";
 import type { WorkflowItem, TaskItem } from "@/lib/api";
@@ -83,6 +83,37 @@ export default function WorkflowDetailPage() {
     }
   };
 
+  // 分享工作流
+  const handleShare = async () => {
+    if (!id) return;
+    try {
+      const result = await workflowApi.share(id);
+      const shareUrl = `${window.location.origin}${result.share_url}`;
+      await navigator.clipboard.writeText(shareUrl);
+      message.success("分享链接已复制到剪贴板！");
+    } catch (err) {
+      message.error("分享失败");
+    }
+  };
+
+  // 导出 YAML
+  const handleExport = async () => {
+    if (!id) return;
+    try {
+      const result = await workflowApi.export(id);
+      const blob = new Blob([result.yaml], { type: "text/yaml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      message.success("导出成功");
+    } catch (err) {
+      message.error("导出失败");
+    }
+  };
+
   if (loading) return <Spin size="large" />;
   if (!workflow) return <Text>工作流不存在</Text>;
 
@@ -99,6 +130,16 @@ export default function WorkflowDetailPage() {
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
         <Title level={3}>{workflow.name}</Title>
         <Space>
+          <Tooltip title="分享工作流">
+            <Button icon={<ShareAltOutlined />} onClick={handleShare}>
+              分享
+            </Button>
+          </Tooltip>
+          <Tooltip title="导出 YAML 文件">
+            <Button icon={<DownloadOutlined />} onClick={handleExport}>
+              导出
+            </Button>
+          </Tooltip>
           <Button
             icon={<EditOutlined />}
             onClick={() => { setEditYaml(workflow.yaml_definition); setEditModalOpen(true); }}
