@@ -15,6 +15,7 @@ from app.config import settings
 from app.database import init_db
 from app.logging_config import setup_logging
 from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications, plugins
+from app.api import sandboxes
 from app.api.auth import router as auth_router
 from app.services.ws_manager import ws_manager
 from app.services.scheduler import scheduler
@@ -80,6 +81,10 @@ async def lifespan(app: FastAPI):
 
     scheduler.stop_scheduler()
 
+    from app.services.sandbox import sandbox_manager
+
+    await sandbox_manager.cleanup_all()
+
 
 app = FastAPI(
     title="Agent Orchestrator",
@@ -106,6 +111,7 @@ app.include_router(webhooks.router)
 app.include_router(schedules.router)
 app.include_router(notifications.router)
 app.include_router(plugins.router)
+app.include_router(sandboxes.router)
 
 
 # API Key 认证中间件
