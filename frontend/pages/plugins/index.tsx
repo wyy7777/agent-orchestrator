@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import {
   Typography, Card, Tag, Collapse, Row, Col, Spin, Empty, message, Descriptions, Space,
+  Button, Modal, Form, Input, Alert,
 } from "antd";
-import { ApiOutlined } from "@ant-design/icons";
+import { ApiOutlined, PlayCircleOutlined, ThunderboltOutlined } from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
+const { TextArea } = Input;
 
 // ==================== 类型定义 ====================
 
@@ -87,7 +89,12 @@ function SchemaFieldTable({ properties, required }: { properties: Record<string,
 
 // ==================== 插件卡片 ====================
 
-function PluginCard({ plugin }: { plugin: PluginItem }) {
+interface PluginCardProps {
+  plugin: PluginItem;
+  onTest: (plugin: PluginItem) => void;
+}
+
+function PluginCard({ plugin, onTest }: PluginCardProps) {
   const hasSchema = plugin.schema?.properties && Object.keys(plugin.schema.properties).length > 0;
   const fieldCount = hasSchema ? Object.keys(plugin.schema.properties!).length : 0;
 
@@ -95,6 +102,16 @@ function PluginCard({ plugin }: { plugin: PluginItem }) {
     <Card
       hoverable
       style={{ height: "100%" }}
+      actions={[
+        <Button
+          key="test"
+          type="link"
+          icon={<PlayCircleOutlined />}
+          onClick={() => onTest(plugin)}
+        >
+          测试
+        </Button>,
+      ]}
     >
       <Card.Meta
         title={
@@ -152,6 +169,11 @@ function PluginCard({ plugin }: { plugin: PluginItem }) {
 export default function PluginsPage() {
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testModalOpen, setTestModalOpen] = useState(false);
+  const [selectedPlugin, setSelectedPlugin] = useState<PluginItem | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; result?: unknown; error?: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [form] = Form.useForm();
 
   useEffect(() => {
     (async () => {
@@ -165,6 +187,33 @@ export default function PluginsPage() {
       }
     })();
   }, []);
+
+  const handleTest = (plugin: PluginItem) => {
+    setSelectedPlugin(plugin);
+    setTestModalOpen(true);
+    setTestResult(null);
+    form.resetFields();
+  };
+
+  const handleRunTest = async (values: Record<string, unknown>) => {
+    if (!selectedPlugin) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(`${API_BASE}/api/plugins/${selectedPlugin.name}/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: values }),
+      });
+      const data = await res.json();
+      setTestResult(data);
+    } catch (err) {
+      setTestResult({ success: false, error: (err as Error).message });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -194,11 +243,82 @@ export default function PluginsPage() {
         <Row gutter={[16, 16]}>
           {plugins.map((plugin) => (
             <Col key={plugin.name} xs={24} sm={12} lg={8}>
-              <PluginCard plugin={plugin} />
+              <PluginCard plugin={plugin} onTest={handleTest} />
             </Col>
           ))}
         </Row>
       )}
+
+      {/* 插件测试 Modal */}
+      <Modal
+        title={`测试插件: ${selectedPlugin?.name}`}
+        open={testModalOpen}
+        onCancel={() => setTestModalOpen(false)}
+        footer={null}
+        width={600}
+      >
+        {selectedPlugin && (
+          <>
+            <Paragraph type="secondary">{selectedPlugin.description}</Paragraph>
+
+            {selectedPlugin.schema?.properties && Object.keys(selectedPlugin.schema.properties).length > 0 ? (
+              <Form form={form} onFinish={handleRunTest} layout="vertical">
+                {Object.entries(selectedPlugin.schema.properties).map(([key, field]) => (
+                  <Form.Item
+                    key={key}
+                    name={key}
+                    label={
+                      <Space>
+                        <Text code>{key}</Text>
+                        {field.type && <Tag color="blue">{field.type}</Tag>}
+                        {selectedPlugin.schema?.required?.includes(key) && (
+                          <Tag color="red">必填</Tag>
+                        )}
+                      </Space>
+                    }
+                    rules={
+                      selectedPlugin.schema?.required?.includes(key)
+                        ? [{ required: true, message: `请输入 ${key}` }]
+                        : undefined
+                    }
+                    tooltip={field.description}
+                  >
+                    <Input placeholder={field.description || `输入 ${key}`} />
+                  </Form.Item>
+                ))}
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={testing} icon={<ThunderboltOutlined />} block>
+                    运行测试
+                  </Button>
+                </Form.Item>
+              </Form>
+            ) : (
+              <Button
+                type="primary"
+                loading={testing}
+                onClick={() => handleRunTest({})}
+                icon={<ThunderboltOutlined />}
+                block
+              >
+                运行测试（无配置）
+              </Button>
+            )}
+
+            {testResult && (
+              <Alert
+                type={testResult.success ? "success" : "error"}
+                message={testResult.success ? "测试成功" : "测试失败"}
+                description={
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                    {JSON.stringify(testResult.success ? testResult.result : testResult.error, null, 2)}
+                  </pre>
+                }
+                style={{ marginTop: 16 }}
+              />
+            )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -14,7 +14,10 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface Sandbox {
   task_id: string;
-  container_id: string;
+  type: "docker" | "local";
+  container_id?: string;
+  sandbox_id?: string;
+  workspace?: string;
 }
 
 export default function SandboxesPage() {
@@ -147,9 +150,29 @@ export default function SandboxesPage() {
                 render: (id: string) => <Text code>{id.substring(0, 12)}...</Text>,
               },
               {
-                title: "容器 ID",
-                dataIndex: "container_id",
-                render: (id: string) => <Text code>{id.substring(0, 12)}...</Text>,
+                title: "类型",
+                dataIndex: "type",
+                render: (type: string) => (
+                  <Tag color={type === "docker" ? "blue" : "green"}>
+                    {type === "docker" ? "Docker" : "本地"}
+                  </Tag>
+                ),
+              },
+              {
+                title: "标识",
+                render: (_: unknown, record: Sandbox) => (
+                  <Text code>
+                    {record.type === "docker"
+                      ? record.container_id?.substring(0, 12)
+                      : record.sandbox_id}
+                  </Text>
+                ),
+              },
+              {
+                title: "工作目录",
+                dataIndex: "workspace",
+                ellipsis: true,
+                render: (path: string) => path || "-",
               },
               {
                 title: "状态",

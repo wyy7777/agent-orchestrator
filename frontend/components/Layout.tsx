@@ -16,6 +16,7 @@ import {
   BellOutlined,
   SettingOutlined,
   MenuOutlined,
+  CloudServerOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { useI18n } from "@/lib/i18n";
@@ -95,6 +96,7 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
     { key: "/approvals", icon: <CheckCircleOutlined />, label: t("nav.approvals") },
     { key: "/triggers", icon: <ThunderboltOutlined />, label: t("nav.triggers") },
     { key: "/plugins", icon: <ApiOutlined />, label: t("nav.plugins") },
+    { key: "/sandboxes", icon: <CloudServerOutlined />, label: locale === "zh" ? "沙箱" : "Sandboxes" },
     { key: "/settings/notifications", icon: <SettingOutlined />, label: t("nav.settings") },
   ];
 
