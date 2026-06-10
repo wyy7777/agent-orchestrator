@@ -50,6 +50,7 @@ export default function TaskTimeline({ steps, currentStepIndex, onStepClick }: P
         const isActive = step.step_index === currentStepIndex;
 
         return {
+          key: step.id,
           color: cfg.color === "success" ? "green" : cfg.color === "error" ? "red" : cfg.color === "warning" ? "orange" : cfg.color === "processing" ? "blue" : "gray",
           dot: isActive ? <LoadingOutlined spin style={{ fontSize: 16 }} /> : undefined,
           children: (

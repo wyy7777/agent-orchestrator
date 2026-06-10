@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     NOTIFY_ON_TASK_FAIL: bool = True
     NOTIFY_ON_APPROVAL_NEEDED: bool = True
 
+    # JWT 认证
+    SECRET_KEY: str = "your-secret-key-change-in-production"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 小时
+
     # 服务器
     HOST: str = "0.0.0.0"
     PORT: int = 8000

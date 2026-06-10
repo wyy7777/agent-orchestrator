@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.database import Base, get_db
 from app.main import app
 
+# 确保所有模型被导入（用于表创建）
+from app.models import User, Workflow, Task, StepExecution, Approval, Webhook  # noqa: F401
+
 TEST_DB_URL = "sqlite+aiosqlite:///./test.db"
 test_engine = create_async_engine(TEST_DB_URL, echo=False)
 test_session = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)

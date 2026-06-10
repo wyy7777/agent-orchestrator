@@ -15,11 +15,14 @@ from app.config import settings
 from app.database import init_db
 from app.logging_config import setup_logging
 from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications, plugins
+from app.api.auth import router as auth_router
 from app.services.ws_manager import ws_manager
 from app.services.scheduler import scheduler
 
 # 确保 agent handlers 被注册
 import app.agents.executor  # noqa: F401
+# 确保 User 模型被注册到 Base.metadata
+import app.models.user  # noqa: F401
 
 # 配置日志（控制台 + 文件旋转）
 setup_logging(log_level="DEBUG" if settings.DEBUG else "INFO")
@@ -94,6 +97,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(workflows.router)
 app.include_router(tasks.router)
 app.include_router(approvals.router)
@@ -105,7 +109,7 @@ app.include_router(plugins.router)
 
 
 # API Key 认证中间件
-API_KEY_EXEMPT_PATHS = {"/api/health", "/api/webhooks/github"}
+API_KEY_EXEMPT_PATHS = {"/api/health", "/api/webhooks/github", "/api/auth/register", "/api/auth/login"}
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
