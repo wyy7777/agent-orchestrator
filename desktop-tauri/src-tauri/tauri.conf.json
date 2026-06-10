@@ -1,6 +1,6 @@
 {
   "productName": "Agent Orchestrator",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "identifier": "com.agent-orchestrator.desktop",
   "build": {
     "frontendDist": "../../frontend/out",
