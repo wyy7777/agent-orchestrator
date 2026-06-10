@@ -182,14 +182,46 @@ class ShellCommandPlugin(StepPlugin):
             },
         }
 
+    # 危险命令黑名单（子串匹配，不区分大小写）
+    _DANGEROUS_PATTERNS = (
+        "rm -rf",
+        "rm -fr",
+        "mkfs",
+        "dd if=",
+        ":(){ :|:& };:",
+        "chmod -r 777",
+        "chmod 777 /",
+        "> /dev/sda",
+        "wget -o",
+        "curl -o",
+        "> /etc/",
+        "rm -f /",
+        "shutdown",
+        "reboot",
+        "halt",
+        "init 0",
+        "init 6",
+    )
+
     async def execute(self, config: dict, context: dict) -> dict:
         import asyncio
+        import re as _re
 
         command = config["command"]
         cwd = config.get("cwd")
         timeout = config.get("timeout", 60)
 
         command = _resolve_template(command, context)
+
+        # 命令长度限制
+        if len(command) > 1000:
+            return {"exit_code": -1, "stdout": "", "stderr": "命令长度超过 1000 字符限制"}
+
+        # 危险命令检查
+        command_lower = command.lower()
+        for pattern in self._DANGEROUS_PATTERNS:
+            if pattern.lower() in command_lower:
+                return {"exit_code": -1, "stdout": "", "stderr": f"命令包含危险操作，已被拒绝: {pattern}"}
 
         proc = await asyncio.create_subprocess_shell(
             command,

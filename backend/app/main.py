@@ -181,8 +181,6 @@ async def health():
     return {
         "status": "ok",
         "version": "0.2.0",
-        "debug": settings.DEBUG,
-        "ws_connections": ws_manager.connection_count,
     }
 
 
@@ -194,7 +192,9 @@ if STATIC_DIR.exists():
 
     @app.get("/{full_path:path}")
     async def serve_frontend(request: Request, full_path: str):
-        file_path = STATIC_DIR / full_path
+        file_path = (STATIC_DIR / full_path).resolve()
+        if not str(file_path).startswith(str(STATIC_DIR.resolve())):
+            return JSONResponse(status_code=403, content={"detail": "访问被拒绝"})
         if file_path.is_file():
             return FileResponse(str(file_path))
         return FileResponse(str(STATIC_DIR / "index.html"))

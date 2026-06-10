@@ -2,7 +2,7 @@
 
 将此文件放入 plugins/ 目录即可自动加载。
 """
-from app.engine.plugin import StepPlugin, register_plugin
+from app.engine.plugin import StepPlugin, register_plugin, _deep_get
 
 
 @register_plugin("json_validate")
@@ -86,14 +86,3 @@ class JsonValidatePlugin(StepPlugin):
             "errors": errors,
             "fields_checked": len(data),
         }
-
-
-def _deep_get(obj: dict, path: str):
-    """按点分隔路径从嵌套字典中取值。"""
-    current = obj
-    for key in path.split("."):
-        if isinstance(current, dict):
-            current = current.get(key)
-        else:
-            return None
-    return current

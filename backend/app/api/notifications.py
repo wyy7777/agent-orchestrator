@@ -67,12 +67,21 @@ def _record_history(level: str, message: str, channel: str) -> None:
 # ---------- Routes ----------
 
 
+def _mask_url(url: str) -> str:
+    """对 webhook URL 进行脱敏，只保留前 10 个字符 + ***。"""
+    if not url:
+        return ""
+    if len(url) <= 10:
+        return url + "***"
+    return url[:10] + "***"
+
+
 @router.get("/config", response_model=NotificationConfigResponse)
 async def get_notification_config():
     """获取当前通知配置。"""
     return NotificationConfigResponse(
-        slack_webhook_url=settings.SLACK_WEBHOOK_URL,
-        dingtalk_webhook_url=settings.DINGTALK_WEBHOOK_URL,
+        slack_webhook_url=_mask_url(settings.SLACK_WEBHOOK_URL),
+        dingtalk_webhook_url=_mask_url(settings.DINGTALK_WEBHOOK_URL),
         notify_on_task_complete=settings.NOTIFY_ON_TASK_COMPLETE,
         notify_on_task_fail=settings.NOTIFY_ON_TASK_FAIL,
         notify_on_approval_needed=settings.NOTIFY_ON_APPROVAL_NEEDED,
