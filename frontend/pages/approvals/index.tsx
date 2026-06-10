@@ -33,6 +33,10 @@ export default function ApprovalsPage() {
     return () => controller.abort();
   }, []);
 
+  const handleRefresh = () => {
+    load();
+  };
+
   const handleDecide = async (id: string, status: "approved" | "rejected") => {
     try {
       await approvalApi.decide(id, { status });
@@ -47,7 +51,7 @@ export default function ApprovalsPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
         <Title level={3}>待审批列表</Title>
-        <Button icon={<ReloadOutlined />} onClick={load}>
+        <Button icon={<ReloadOutlined />} onClick={handleRefresh}>
           刷新
         </Button>
       </div>

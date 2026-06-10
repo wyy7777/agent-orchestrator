@@ -70,6 +70,10 @@ export default function DashboardPage() {
     return () => controller.abort();
   }, []);
 
+  const handleRefresh = () => {
+    loadData();
+  };
+
   // ---- 图表数据计算 ----
 
   /** 最近 7 天任务趋势 */
@@ -154,7 +158,7 @@ export default function DashboardPage() {
           <Button icon={<DownloadOutlined />} onClick={exportCSV}>
             {t("common.export")} CSV
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={loadData}>
+          <Button icon={<ReloadOutlined />} onClick={handleRefresh}>
             {t("common.refresh")}
           </Button>
         </Space>
