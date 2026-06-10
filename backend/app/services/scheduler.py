@@ -106,6 +106,7 @@ class WorkflowScheduler:
         from app.database import async_session
         from app.models.task import Task
         from app.engine.state_machine import ExecutionEngine
+        from app.main import _engine_event_handler
 
         logger.info(
             f"触发调度 {schedule.id}: workflow={schedule.workflow_id}"
@@ -123,7 +124,7 @@ class WorkflowScheduler:
                 await db.flush()
                 await db.refresh(task)
 
-                engine = ExecutionEngine(db)
+                engine = ExecutionEngine(db, on_event=_engine_event_handler)
                 await engine.start_task(task.id)
                 logger.info(f"调度 {schedule.id} 已创建并启动任务 {task.id}")
         except Exception as e:

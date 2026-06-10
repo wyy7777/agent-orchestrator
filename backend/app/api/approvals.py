@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
 
 
+def _get_engine(db: AsyncSession) -> ExecutionEngine:
+    """创建带事件回调的引擎实例。"""
+    from app.main import _engine_event_handler
+    return ExecutionEngine(db, on_event=_engine_event_handler)
+
+
 @router.get("", response_model=ApprovalListResponse)
 async def list_approvals(
     status: str = "pending",
@@ -106,6 +112,6 @@ async def decide_approval(
 async def _resume_task(task_id: str):
     """在新的数据库 session 中恢复任务执行。"""
     async with async_session() as db:
-        engine = ExecutionEngine(db)
+        engine = _get_engine(db)
         task = await engine.resume_task(task_id)
         await ws_manager.broadcast_task_update(task_id, {"status": task.status})

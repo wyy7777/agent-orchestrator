@@ -12,6 +12,12 @@ from app.schemas.task import TaskCreate, TaskListResponse, TaskResponse
 from app.engine.state_machine import ExecutionEngine
 from app.services.ws_manager import ws_manager
 
+
+def _get_engine(db: AsyncSession) -> ExecutionEngine:
+    """创建带事件回调的引擎实例。"""
+    from app.main import _engine_event_handler
+    return ExecutionEngine(db, on_event=_engine_event_handler)
+
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 VALID_SORT_FIELDS = {
@@ -134,7 +140,7 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{task_id}/start", response_model=TaskResponse)
 async def start_task(task_id: str, db: AsyncSession = Depends(get_db)):
-    engine = ExecutionEngine(db)
+    engine = _get_engine(db)
     try:
         task = await engine.start_task(task_id)
         await db.refresh(task, attribute_names=["step_executions"])
@@ -150,7 +156,7 @@ async def rollback_task(
     target_step_index: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    engine = ExecutionEngine(db)
+    engine = _get_engine(db)
     try:
         task = await engine.rollback_task(task_id, target_step_index)
         await db.refresh(task, attribute_names=["step_executions"])
@@ -162,7 +168,7 @@ async def rollback_task(
 
 @router.post("/{task_id}/resume", response_model=TaskResponse)
 async def resume_task(task_id: str, db: AsyncSession = Depends(get_db)):
-    engine = ExecutionEngine(db)
+    engine = _get_engine(db)
     try:
         task = await engine.resume_task(task_id)
         await db.refresh(task, attribute_names=["step_executions"])

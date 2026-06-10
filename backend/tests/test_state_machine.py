@@ -15,6 +15,7 @@ from app.engine.state_machine import (
     _step_handlers,
     register_handler,
 )
+from app.engine.condition_eval import evaluate_condition
 from app.engine.yaml_parser import StepDefinition, WorkflowDefinition
 
 
@@ -212,74 +213,67 @@ class TestStepDefinition:
 class TestConditionEvaluation:
     """测试条件表达式评估。"""
 
-    @pytest.fixture
-    def engine(self):
-        """创建引擎实例。"""
-        db = AsyncMock()
-        return ExecutionEngine(db)
-
-    def test_empty_condition(self, engine):
+    def test_empty_condition(self):
         """空条件应返回 True。"""
-        assert engine._evaluate_condition("", {}) is True
-        assert engine._evaluate_condition(None, {}) is True
+        assert evaluate_condition("", {}) is True
+        assert evaluate_condition(None, {}) is True
 
-    def test_simple_comparison(self, engine):
+    def test_simple_comparison(self):
         """简单比较。"""
         context = {"result": {"score": 85}}
-        assert engine._evaluate_condition("{result.score} > 80", context) is True
-        assert engine._evaluate_condition("{result.score} > 90", context) is False
+        assert evaluate_condition("{result.score} > 80", context) is True
+        assert evaluate_condition("{result.score} > 90", context) is False
 
-    def test_equality(self, engine):
+    def test_equality(self):
         """相等比较。"""
         context = {"result": {"status": "approved"}}
-        assert engine._evaluate_condition('{result.status} == "approved"', context) is True
-        assert engine._evaluate_condition('{result.status} == "rejected"', context) is False
+        assert evaluate_condition('{result.status} == "approved"', context) is True
+        assert evaluate_condition('{result.status} == "rejected"', context) is False
 
-    def test_inequality(self, engine):
+    def test_inequality(self):
         """不等比较。"""
         context = {"result": {"score": 85}}
-        assert engine._evaluate_condition("{result.score} != 0", context) is True
-        assert engine._evaluate_condition("{result.score} != 85", context) is False
+        assert evaluate_condition("{result.score} != 0", context) is True
+        assert evaluate_condition("{result.score} != 85", context) is False
 
-    def test_less_than(self, engine):
+    def test_less_than(self):
         """小于比较。"""
         context = {"result": {"score": 50}}
-        assert engine._evaluate_condition("{result.score} < 80", context) is True
-        assert engine._evaluate_condition("{result.score} < 30", context) is False
+        assert evaluate_condition("{result.score} < 80", context) is True
+        assert evaluate_condition("{result.score} < 30", context) is False
 
-    def test_boolean_condition(self, engine):
+    def test_boolean_condition(self):
         """布尔条件。"""
         context = {"result": {"approved": True}}
-        assert engine._evaluate_condition("{result.approved}", context) is True
+        assert evaluate_condition("{result.approved}", context) is True
 
         context = {"result": {"approved": False}}
-        assert engine._evaluate_condition("{result.approved}", context) is False
+        assert evaluate_condition("{result.approved}", context) is False
 
-    def test_and_condition(self, engine):
+    def test_and_condition(self):
         """复合条件 (and)。"""
         context = {"result": {"score": 85, "approved": True}}
-        assert engine._evaluate_condition("{result.score} > 80 and {result.approved} == true", context) is True
-        assert engine._evaluate_condition("{result.score} > 90 and {result.approved} == true", context) is False
+        assert evaluate_condition("{result.score} > 80 and {result.approved} == true", context) is True
+        assert evaluate_condition("{result.score} > 90 and {result.approved} == true", context) is False
 
-    def test_or_condition(self, engine):
+    def test_or_condition(self):
         """复合条件 (or)。"""
         context = {"result": {"score": 50, "approved": True}}
-        assert engine._evaluate_condition("{result.score} > 80 or {result.approved} == true", context) is True
-        assert engine._evaluate_condition("{result.score} > 80 or {result.approved} == false", context) is False
+        assert evaluate_condition("{result.score} > 80 or {result.approved} == true", context) is True
+        assert evaluate_condition("{result.score} > 80 or {result.approved} == false", context) is False
 
-    def test_nested_key(self, engine):
+    def test_nested_key(self):
         """嵌套 key。"""
         context = {"data": {"metrics": {"accuracy": 95.5}}}
-        assert engine._evaluate_condition("{data.metrics.accuracy} > 90", context) is True
+        assert evaluate_condition("{data.metrics.accuracy} > 90", context) is True
 
-    def test_missing_key(self, engine):
+    def test_missing_key(self):
         """缺失的 key 应返回 None。"""
         context = {"result": {}}
-        # 缺失的 key 解析为 None，与 None 比较
-        assert engine._evaluate_condition("{result.missing} == None", context) is True
+        assert evaluate_condition("{result.missing} == None", context) is True
 
-    def test_string_comparison(self, engine):
+    def test_string_comparison(self):
         """字符串比较。"""
         context = {"result": {"verdict": "approve"}}
-        assert engine._evaluate_condition('{result.verdict} == "approve"', context) is True
-        assert engine._evaluate_condition('{result.verdict} == "reject"', context) is False
+        assert evaluate_condition('{result.verdict} == "approve"', context) is True
+        assert evaluate_condition('{result.verdict} == "reject"', context) is False

@@ -52,6 +52,25 @@ async def _create_demo_data():
         logger.info(f"Demo 模式：已导入 {min(3, len(templates))} 个工作流模板")
 
 
+async def _engine_event_handler(event: str, *args):
+    """引擎事件回调：解耦 notifier。"""
+    from app.services.notifier import notifier
+    handlers = {
+        "task_started": notifier.notify_task_started,
+        "task_completed": notifier.notify_task_completed,
+        "task_failed": notifier.notify_task_failed,
+        "step_completed": notifier.notify_step_completed,
+        "step_failed": notifier.notify_step_failed,
+        "approval_needed": notifier.notify_approval_needed,
+    }
+    handler = handlers.get(event)
+    if handler:
+        try:
+            await handler(*args)
+        except Exception as e:
+            logger.warning(f"通知发送失败 ({event}): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 确保 SECRET_KEY 已配置
@@ -65,7 +84,7 @@ async def lifespan(app: FastAPI):
     from app.database import async_session
     from app.engine.state_machine import ExecutionEngine
     async with async_session() as db:
-        engine = ExecutionEngine(db)
+        engine = ExecutionEngine(db, on_event=_engine_event_handler)
         await engine.recover_orphaned_tasks()
 
     # 加载外部插件
@@ -216,9 +235,17 @@ if STATIC_DIR.exists():
 
     @app.get("/{full_path:path}")
     async def serve_frontend(request: Request, full_path: str):
+        # 排除 API 路由
+        if full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "API 路由未找到"})
+
         file_path = (STATIC_DIR / full_path).resolve()
         if not str(file_path).startswith(str(STATIC_DIR.resolve())):
             return JSONResponse(status_code=403, content={"detail": "访问被拒绝"})
         if file_path.is_file():
             return FileResponse(str(file_path))
+        # 尝试添加 .html 后缀
+        html_path = (STATIC_DIR / f"{full_path}.html").resolve()
+        if html_path.is_file() and str(html_path).startswith(str(STATIC_DIR.resolve())):
+            return FileResponse(str(html_path))
         return FileResponse(str(STATIC_DIR / "index.html"))
