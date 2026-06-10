@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = ""
     GITHUB_WEBHOOK_SECRET: str = ""
 
+    # GitLab
+    GITLAB_TOKEN: str = ""
+
+    # Bitbucket
+    BITBUCKET_TOKEN: str = ""
+
     # 执行引擎
     MAX_TOKENS_PER_TASK: int = 500_000
     TASK_TIMEOUT_SECONDS: int = 1800  # 30 分钟
