@@ -17,6 +17,8 @@ Enterprise-grade AI Agent workflow orchestration platform — make AI Agents rel
 - **Workflow Template Library** — 5 built-in templates to get started quickly
 - **Demo Mode** — Zero-config experience with `--demo` flag
 - **Dark Mode** — Automatic theme based on system preference
+- **Conditional Branching** — if/else conditions to dynamically control workflow execution
+- **PostgreSQL Support** — Production-ready PostgreSQL database option
 - **Desktop App** — Tauri v2 desktop wrapper with sidecar backend
 
 ## Quick Start
@@ -107,6 +109,29 @@ steps:
       provider: deepseek
 ```
 
+### Conditional Branching Example
+
+```yaml
+name: Smart Fix
+steps:
+  - name: analyze
+    type: analyze
+
+  - name: check_severity
+    type: condition
+    condition: "{results.analyze.analysis.severity} == 'high'"
+    else:
+      - name: light_fix
+        type: execute
+        config:
+          provider: deepseek
+
+  - name: heavy_fix
+    type: execute
+    config:
+      provider: deepseek
+```
+
 ### Step Types
 
 | Type | Description |
@@ -116,6 +141,9 @@ steps:
 | `review` | AI reviews execution results, generates quality report |
 | `approval` | Human approval gate |
 | `merge` | Merge results (e.g., create Git PR) |
+| `condition` | Conditional branching with if/else support |
+| `subtask` | Sub-workflow invocation |
+| `loop` | Loop execution over sub-steps |
 | `script` | Execute custom script |
 
 ## Built-in Templates
@@ -147,7 +175,7 @@ steps:
 │           AI Agent Layer                 │
 │       DeepSeek / OpenAI / Claude         │
 │                  │                       │
-│           SQLite Database                │
+│      SQLite / PostgreSQL Database        │
 └─────────────────────────────────────────┘
 ```
 
@@ -157,7 +185,7 @@ steps:
 |-------|-----------|
 | Frontend | Next.js (Pages Router) + Ant Design + Monaco Editor |
 | Backend | Python FastAPI |
-| Database | SQLite (zero-config) |
+| Database | SQLite (zero-config) / PostgreSQL (production) |
 | Execution Engine | Custom asyncio state machine |
 | AI API | DeepSeek / OpenAI / Claude |
 | CLI | Typer + Uvicorn |

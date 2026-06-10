@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import operator
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -70,6 +72,96 @@ class ExecutionEngine:
     def __init__(self, db: AsyncSession):
         self.db = db
         self._running_tasks: dict[str, asyncio.Task] = {}
+
+    # 条件表达式运算符映射
+    _OPERATORS = {
+        ">": operator.gt,
+        ">=": operator.ge,
+        "<": operator.lt,
+        "<=": operator.le,
+        "==": operator.eq,
+        "!=": operator.ne,
+    }
+
+    def _evaluate_condition(self, condition: str, context: dict[str, Any]) -> bool:
+        """
+        评估条件表达式。
+
+        支持的语法:
+        - 比较: {result.score} > 80
+        - 存在性: {result.pr_url}
+        - 布尔: {result.approved} == true
+        - 复合: {result.score} > 80 and {result.approved} == true
+        """
+        if not condition:
+            return True
+
+        # 替换上下文变量 {key.path}
+        def resolve_var(match: re.Match) -> str:
+            var_path = match.group(1).strip()
+            value = context
+            for key in var_path.split("."):
+                if isinstance(value, dict):
+                    value = value.get(key)
+                else:
+                    value = None
+                    break
+            if value is None:
+                return "None"
+            if isinstance(value, bool):
+                return str(value).lower()
+            if isinstance(value, (int, float)):
+                return str(value)
+            if isinstance(value, str):
+                return f'"{value}"'
+            return str(value)
+
+        expr = re.sub(r"\{([^}]+)\}", resolve_var, condition)
+
+        # 处理复合条件 (and/or)
+        if " and " in expr:
+            parts = expr.split(" and ")
+            return all(self._evaluate_single_condition(p.strip()) for p in parts)
+        if " or " in expr:
+            parts = expr.split(" or ")
+            return any(self._evaluate_single_condition(p.strip()) for p in parts)
+
+        return self._evaluate_single_condition(expr)
+
+    def _evaluate_single_condition(self, expr: str) -> bool:
+        """评估单个条件表达式。"""
+        expr = expr.strip()
+
+        # 尝试解析比较表达式（优先于存在性检查）
+        for op_str, op_func in self._OPERATORS.items():
+            if op_str in expr:
+                left, right = expr.split(op_str, 1)
+                left = left.strip().strip('"')
+                right = right.strip().strip('"')
+                try:
+                    left_val = float(left) if left != "None" else None
+                    right_val = float(right) if right != "None" else None
+                    if left_val is not None and right_val is not None:
+                        return op_func(left_val, right_val)
+                except (ValueError, TypeError):
+                    pass
+                # 字符串比较
+                if left == "None":
+                    return right == "None"
+                if right == "None":
+                    return False
+                return op_func(left, right)
+
+        # 存在性检查 (truthy)
+        if expr.lower() == "true":
+            return True
+        if expr.lower() in ("false", "none", "null", "0", "no", ""):
+            return False
+        if expr.startswith('"') and expr.endswith('"'):
+            return bool(expr[1:-1])
+
+        # 默认为真（非空字符串）
+        return bool(expr)
 
     async def recover_orphaned_tasks(self):
         """启动时恢复：将所有 running 状态的任务标记为 failed。"""
@@ -395,6 +487,7 @@ class ExecutionEngine:
                 }
 
                 # 将步骤分组：连续的并行步骤归为一组，其余单独为组
+                # 同时检查条件步骤
                 step_groups: list[list[tuple[StepExecution, StepDefinition]]] = []
                 current_group: list[tuple[StepExecution, StepDefinition]] = []
 
@@ -405,6 +498,42 @@ class ExecutionEngine:
                         # 已完成步骤：清空当前组（之前步骤都已完成）
                         current_group = []
                         continue
+
+                    # 条件检查
+                    if step_def.condition:
+                        condition_result = self._evaluate_condition(step_def.condition, context)
+                        if not condition_result:
+                            # 条件不满足，跳过此步骤
+                            step_exec.status = StepStatus.SKIPPED.value
+                            step_exec.output_data = {"skipped": True, "reason": f"条件不满足: {step_def.condition}"}
+                            step_exec.completed_at = datetime.now(timezone.utc)
+                            logger.info(f"步骤 '{step_exec.step_name}' 被跳过 (条件不满足: {step_def.condition})")
+
+                            # 执行 else 分支（如果有）
+                            if step_def.else_steps:
+                                logger.info(f"执行步骤 '{step_exec.step_name}' 的 else 分支")
+                                for else_step_def in step_def.else_steps:
+                                    else_exec = StepExecution(
+                                        task_id=task_id,
+                                        step_index=-1,
+                                        step_name=f"{step_exec.step_name}.else.{else_step_def.name}",
+                                        step_type=else_step_def.type,
+                                        status=StepStatus.RUNNING.value,
+                                        started_at=datetime.now(timezone.utc),
+                                    )
+                                    db.add(else_exec)
+                                    await db.flush()
+                                    try:
+                                        output = await self._execute_single_step(
+                                            else_exec, else_step_def, task, context, db
+                                        )
+                                        context["results"][else_exec.step_name] = output
+                                    except Exception as e:
+                                        else_exec.status = StepStatus.FAILED.value
+                                        else_exec.error_message = str(e)
+                                        else_exec.completed_at = datetime.now(timezone.utc)
+                                        logger.error(f"else 分支步骤 '{else_step_def.name}' 失败: {e}")
+                            continue
 
                     if step_def.parallel and current_group and workflow_def.steps[current_group[-1][0].step_index].parallel:
                         # 前一个也是并行步骤，归入同一组

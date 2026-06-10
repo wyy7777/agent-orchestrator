@@ -1,0 +1,63 @@
+# 条件分支修复工作流
+# 根据问题严重程度选择不同的修复策略
+
+name: 条件分支修复
+description: 分析问题严重程度，对高严重度问题执行深度修复，低严重度问题执行轻量修复
+
+settings:
+  max_tokens: 4000
+  timeout: 600
+
+steps:
+  - name: 问题分析
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+      model: deepseek-chat
+    prompt_template: |
+      分析以下问题，判断严重程度。
+      返回 JSON 格式:
+      {
+        "severity": "high/medium/low",
+        "category": "bug/security/performance/style",
+        "description": "问题描述",
+        "affected_files": ["文件路径"],
+        "root_cause": "根因分析"
+      }
+
+  - name: 严重程度判断
+    type: condition
+    condition: "{results.问题分析.analysis.severity} == 'high' or {results.问题分析.analysis.severity} == 'medium'"
+    else:
+      - name: 轻量修复
+        type: execute
+        timeout: 180
+        config:
+          provider: deepseek
+          model: deepseek-chat
+        prompt_template: |
+          对以下低严重度问题执行轻量修复（如添加注释、格式调整等）:
+          {analysis}
+
+  - name: 深度修复
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+      model: deepseek-chat
+    prompt_template: |
+      对以下高/中严重度问题执行深度修复:
+      {analysis}
+
+  - name: 代码审查
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek
+      model: deepseek-chat
+    prompt_template: |
+      审查修复代码的质量和完整性。
+
+  - name: 合并修复
+    type: merge

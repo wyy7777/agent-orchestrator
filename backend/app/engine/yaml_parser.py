@@ -18,6 +18,7 @@ class StepDefinition:
     parallel: bool = False
     steps: list["StepDefinition"] = field(default_factory=list)  # loop 子步骤
     condition: str | None = None  # 条件表达式，如 "{result.score} > 80"
+    else_steps: list["StepDefinition"] = field(default_factory=list)  # else 分支步骤
     loop_items: str | None = None  # 循环数据源 key
     max_iterations: int = field(default_factory=lambda: settings.DEFAULT_MAX_ITERATIONS)
     subtask_workflow: str | None = None  # 子工作流 ID
@@ -31,7 +32,7 @@ class WorkflowDefinition:
     settings: dict[str, Any] = field(default_factory=dict)
 
 
-VALID_STEP_TYPES = {"analyze", "execute", "review", "approval", "merge", "script", "subtask", "loop"}
+VALID_STEP_TYPES = {"analyze", "execute", "review", "approval", "merge", "script", "subtask", "loop", "condition"}
 
 
 def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
@@ -91,6 +92,29 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                     )
                 )
 
+        # 解析 else 分支步骤
+        else_steps: list[StepDefinition] = []
+        if "else" in step_data:
+            else_data = step_data["else"]
+            if isinstance(else_data, list):
+                for j, sub_data in enumerate(else_data):
+                    if not isinstance(sub_data, dict):
+                        raise ValueError(f"步骤 '{step_name}' 的 else 分支步骤 {j} 必须是字典")
+                    sub_name = sub_data.get("name", f"{step_name}_else_{j}")
+                    sub_type = sub_data.get("type")
+                    if not sub_type:
+                        raise ValueError(f"else 分支步骤 '{sub_name}' 必须定义 type 字段")
+                    else_steps.append(
+                        StepDefinition(
+                            name=sub_name,
+                            type=sub_type,
+                            config=sub_data.get("config", {}),
+                            prompt_template=sub_data.get("prompt_template"),
+                            timeout=sub_data.get("timeout", settings.DEFAULT_STEP_TIMEOUT),
+                            condition=sub_data.get("condition"),
+                        )
+                    )
+
         steps.append(
             StepDefinition(
                 name=step_name,
@@ -101,6 +125,7 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                 parallel=step_data.get("parallel", False),
                 steps=sub_steps,
                 condition=step_data.get("condition"),
+                else_steps=else_steps,
                 loop_items=step_data.get("loop_items"),
                 max_iterations=step_data.get("max_iterations", settings.DEFAULT_MAX_ITERATIONS),
                 subtask_workflow=step_data.get("subtask_workflow"),

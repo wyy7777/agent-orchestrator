@@ -304,3 +304,25 @@ class MergeHandler(StepHandler):
                 "reason": str(e),
                 "pr_url": None,
             }
+
+
+@register_handler("condition")
+class ConditionHandler(StepHandler):
+    """条件步骤：评估条件并返回结果。"""
+
+    async def execute(
+        self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
+        condition = step.condition
+        if not condition:
+            return {"evaluated": True, "condition": None, "result": True}
+
+        from app.engine.state_machine import ExecutionEngine
+        engine = ExecutionEngine(db)
+        result = engine._evaluate_condition(condition, context)
+
+        return {
+            "evaluated": True,
+            "condition": condition,
+            "result": result,
+        }

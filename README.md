@@ -17,6 +17,8 @@
 - **工作流模板库** — 5 个内置模板，快速上手
 - **Demo 模式** — `--demo` 参数零配置体验
 - **暗色模式** — 跟随系统偏好自动切换
+- **条件分支** — 支持 if/else 条件判断，动态控制工作流执行
+- **PostgreSQL 支持** — 生产环境可切换 PostgreSQL 数据库
 - **一键启动** — `pip install` 后一条命令启动完整服务（前端 + 后端）
 
 ## 快速开始
@@ -107,6 +109,29 @@ steps:
       provider: deepseek
 ```
 
+### 条件分支示例
+
+```yaml
+name: 智能修复
+steps:
+  - name: 分析
+    type: analyze
+
+  - name: 判断严重程度
+    type: condition
+    condition: "{results.analyze.analysis.severity} == 'high'"
+    else:
+      - name: 轻度修复
+        type: execute
+        config:
+          provider: deepseek
+
+  - name: 重度修复
+    type: execute
+    config:
+      provider: deepseek
+```
+
 ### 步骤类型
 
 | 类型 | 说明 |
@@ -116,6 +141,9 @@ steps:
 | `review` | AI 审查执行结果，生成质量报告 |
 | `approval` | 人工审批门控 |
 | `merge` | 合并结果（如创建 Git PR） |
+| `condition` | 条件判断，支持 if/else 分支 |
+| `subtask` | 子工作流调用 |
+| `loop` | 循环执行子步骤 |
 | `script` | 执行自定义脚本 |
 
 ## 架构
@@ -137,7 +165,7 @@ steps:
 │           AI 代理层                       │
 │       DeepSeek / OpenAI / Claude         │
 │                  │                       │
-│           SQLite 数据库                   │
+│      SQLite / PostgreSQL 数据库           │
 └─────────────────────────────────────────┘
 ```
 
@@ -147,7 +175,7 @@ steps:
 |----|------|
 | 前端 | Next.js (Pages Router) + Ant Design |
 | 后端 | Python FastAPI |
-| 数据库 | SQLite（零配置） |
+| 数据库 | SQLite（零配置）/ PostgreSQL（生产推荐） |
 | 执行引擎 | 自研 asyncio 状态机 |
 | AI API | DeepSeek / OpenAI / Claude |
 | CLI | Typer + Uvicorn |
