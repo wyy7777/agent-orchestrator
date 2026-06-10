@@ -1,0 +1,42 @@
+# API 文档生成工作流
+name: API 文档生成
+description: 分析 API 代码 → 生成 OpenAPI 文档 → 审批 → 保存文档
+
+steps:
+  - name: API 分析
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## API 代码分析
+
+      {code}
+
+      请分析这段 API 代码，识别所有端点、参数、响应格式。
+
+  - name: 文档方案审批
+    type: approval
+    timeout: 3600
+
+  - name: 生成文档
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## 文档生成任务
+
+      {plan}
+
+      请为上述 API 生成完整的 OpenAPI 3.0 文档（YAML 格式），包括：
+      1. 路径定义
+      2. 请求/响应 schema
+      3. 示例值
+      4. 错误码说明
+
+  - name: 文档审查
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek

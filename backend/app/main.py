@@ -145,6 +145,12 @@ async def rate_limit_middleware(request: Request, call_next):
     # 清理过期记录
     _rate_store[client_ip] = [t for t in _rate_store[client_ip] if t > window_start]
 
+    # 定期清理空 IP 条目（每 100 次请求清理一次）
+    if len(_rate_store) > 1000:
+        empty_ips = [ip for ip, times in _rate_store.items() if not times]
+        for ip in empty_ips:
+            del _rate_store[ip]
+
     if len(_rate_store[client_ip]) >= RATE_LIMIT:
         return JSONResponse(
             status_code=429,

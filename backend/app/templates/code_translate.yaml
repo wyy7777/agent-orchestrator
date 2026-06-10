@@ -1,0 +1,41 @@
+# 代码翻译工作流
+name: 代码翻译
+description: 分析源代码 → 翻译到目标语言 → 审批 → 保存翻译结果
+
+steps:
+  - name: 源代码分析
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## 源代码分析
+
+      {code}
+
+      请分析这段代码的功能、结构和依赖关系。
+
+  - name: 翻译方案审批
+    type: approval
+    timeout: 3600
+
+  - name: 执行翻译
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## 代码翻译任务
+
+      {plan}
+
+      请将上述代码翻译为目标语言，保持：
+      1. 相同的功能逻辑
+      2. 相同的代码风格
+      3. 适当的语言特性使用
+
+  - name: 翻译审查
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek

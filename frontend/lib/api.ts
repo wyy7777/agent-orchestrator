@@ -4,9 +4,22 @@ const REQUEST_TIMEOUT = 30000; // 30 秒
 
 async function request<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit & { signal?: AbortSignal }
 ): Promise<T> {
+  const externalSignal = options?.signal;
   const controller = new AbortController();
+
+  // 外部 signal abort 时联动取消
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal.addEventListener("abort", () => controller.abort(externalSignal.reason), {
+        once: true,
+      });
+    }
+  }
+
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
@@ -44,9 +57,10 @@ export interface WorkflowListResponse {
 }
 
 export const workflowApi = {
-  list: (skip = 0, limit = 20) =>
-    request<WorkflowListResponse>(`/api/workflows?skip=${skip}&limit=${limit}`),
-  get: (id: string) => request<WorkflowItem>(`/api/workflows/${id}`),
+  list: (skip = 0, limit = 20, signal?: AbortSignal) =>
+    request<WorkflowListResponse>(`/api/workflows?skip=${skip}&limit=${limit}`, { signal }),
+  get: (id: string, signal?: AbortSignal) =>
+    request<WorkflowItem>(`/api/workflows/${id}`, { signal }),
   create: (data: { name: string; description?: string; yaml_definition: string }) =>
     request<WorkflowItem>("/api/workflows", {
       method: "POST",
@@ -64,9 +78,9 @@ export const workflowApi = {
       method: "POST",
       body: JSON.stringify({ yaml_content }),
     }),
-  templates: () =>
+  templates: (signal?: AbortSignal) =>
     request<Array<{ name: string; description: string; yaml_definition: string }>>(
-      "/api/workflows/templates"
+      "/api/workflows/templates", { signal }
     ),
   importTemplate: (index: number) =>
     request<WorkflowItem>(`/api/workflows/templates/${index}`, { method: "POST" }),
@@ -123,7 +137,9 @@ export const taskApi = {
     sort_order?: string;
     page?: number;
     page_size?: number;
+    signal?: AbortSignal;
   }) => {
+    const { signal } = params || {};
     const sp = new URLSearchParams();
     if (params?.workflow_id) sp.set("workflow_id", params.workflow_id);
     if (params?.status) sp.set("status", params.status);
@@ -134,7 +150,7 @@ export const taskApi = {
     if (params?.sort_order) sp.set("sort_order", params.sort_order);
     if (params?.page) sp.set("page", String(params.page));
     if (params?.page_size) sp.set("page_size", String(params.page_size));
-    return request<TaskListResponse>(`/api/tasks?${sp}`);
+    return request<TaskListResponse>(`/api/tasks?${sp}`, { signal });
   },
   get: (id: string) => request<TaskItem>(`/api/tasks/${id}`),
   create: (data: {
@@ -175,9 +191,9 @@ export interface ApprovalListResponse {
 }
 
 export const approvalApi = {
-  list: (status = "pending", skip = 0, limit = 20) =>
+  list: (status = "pending", skip = 0, limit = 20, signal?: AbortSignal) =>
     request<ApprovalListResponse>(
-      `/api/approvals?status=${status}&skip=${skip}&limit=${limit}`
+      `/api/approvals?status=${status}&skip=${skip}&limit=${limit}`, { signal }
     ),
   decide: (id: string, data: { status: string; approver?: string; comment?: string }) =>
     request<ApprovalItem>(`/api/approvals/${id}/decide`, {
@@ -199,7 +215,7 @@ export interface DashboardStatsData {
 }
 
 export const dashboardApi = {
-  stats: () => request<DashboardStatsData>("/api/dashboard/stats"),
+  stats: (signal?: AbortSignal) => request<DashboardStatsData>("/api/dashboard/stats", { signal }),
 };
 
 // === Notification ===

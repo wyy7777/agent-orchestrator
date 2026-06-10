@@ -20,26 +20,34 @@ export default function WorkflowListPage() {
   const [importing, setImporting] = useState<number | null>(null);
   const router = useRouter();
 
-  const load = async (p = page) => {
+  const load = async (p = page, signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const res = await workflowApi.list((p - 1) * 10, 10);
+      const res = await workflowApi.list((p - 1) * 10, 10, signal);
+      if (signal?.aborted) return;
       setWorkflows(res.items);
       setTotal(res.total);
 
       if (res.total === 0) {
-        const tpl = await workflowApi.templates();
+        const tpl = await workflowApi.templates(signal);
+        if (signal?.aborted) return;
         setTemplates(tpl.map((t, i) => ({ ...t, index: i })));
       }
     } catch (err) {
-      message.error("加载失败");
+      if (!signal?.aborted) {
+        message.error("加载失败");
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    load(1);
+    const controller = new AbortController();
+    load(1, controller.signal);
+    return () => controller.abort();
   }, []);
 
   const handleImport = async (index: number) => {

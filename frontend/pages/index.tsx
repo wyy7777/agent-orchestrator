@@ -36,15 +36,16 @@ export default function DashboardPage() {
   const router = useRouter();
   const { t, locale } = useI18n();
 
-  const loadData = async () => {
+  const loadData = async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const [statsData, tasksData, wfData, allTasksData] = await Promise.all([
-        dashboardApi.stats(),
-        taskApi.list({ page_size: 10 }),
-        workflowApi.list(0, 100),
-        taskApi.list({ page_size: 200 }),
+        dashboardApi.stats(signal),
+        taskApi.list({ page_size: 10, signal }),
+        workflowApi.list(0, 100, signal),
+        taskApi.list({ page_size: 200, signal }),
       ]);
+      if (signal?.aborted) return;
       setStats(statsData);
       setRecentTasks(tasksData.items);
       setAllTasks(allTasksData.items);
@@ -53,14 +54,20 @@ export default function DashboardPage() {
       wfData.items.forEach((w) => (wfMap[w.id] = w));
       setWorkflows(wfMap);
     } catch (err) {
-      message.error(t("common.error"));
+      if (!signal?.aborted) {
+        message.error(t("common.error"));
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
   }, []);
 
   // ---- 图表数据计算 ----

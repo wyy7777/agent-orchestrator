@@ -1,0 +1,32 @@
+# 性能优化工作流
+name: 性能优化
+description: 分析代码性能瓶颈 → 生成优化方案 → 审批 → 执行优化 → 审查
+
+steps:
+  - name: 性能分析
+    type: analyze
+    timeout: 120
+    config:
+      provider: deepseek
+    prompt_template: |
+      ## 代码性能分析
+
+      {code}
+
+      请分析这段代码的性能问题，输出结构化的优化方案。
+
+  - name: 优化方案审批
+    type: approval
+    timeout: 3600
+
+  - name: 执行优化
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+
+  - name: 优化审查
+    type: review
+    timeout: 120
+    config:
+      provider: deepseek
