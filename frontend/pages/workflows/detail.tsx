@@ -25,25 +25,32 @@ export default function WorkflowDetailPage() {
   const [saving, setSaving] = useState(false);
   const [triggering, setTriggering] = useState(false);
 
-  const load = async () => {
+  const load = async (signal?: AbortSignal) => {
     if (!id) return;
     setLoading(true);
     try {
       const [wf, tasksRes] = await Promise.all([
-        workflowApi.get(id as string),
-        taskApi.list({ workflow_id: id as string, page_size: 20 }),
+        workflowApi.get(id as string, signal),
+        taskApi.list({ workflow_id: id as string, page_size: 20, signal }),
       ]);
+      if (signal?.aborted) return;
       setWorkflow(wf);
       setTasks(tasksRes.items);
     } catch (err) {
-      message.error("加载失败");
+      if (!signal?.aborted) {
+        message.error("加载失败");
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, [id]);
 
   const handleSaveYaml = async () => {

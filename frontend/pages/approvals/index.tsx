@@ -10,20 +10,27 @@ export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const load = async () => {
+  const load = async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const res = await approvalApi.list("pending");
+      const res = await approvalApi.list("pending", 0, 20, signal);
+      if (signal?.aborted) return;
       setApprovals(res.items);
     } catch (err) {
-      message.error("加载失败");
+      if (!signal?.aborted) {
+        message.error("加载失败");
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const handleDecide = async (id: string, status: "approved" | "rejected") => {
