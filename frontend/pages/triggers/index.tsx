@@ -94,8 +94,8 @@ function WebhookTab({ workflows }: { workflows: WorkflowItem[] }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await webhookApi.list();
-      setWebhooks(data);
+      const data = await webhookApi.list() as any;
+      setWebhooks(data.items ?? data);
     } catch {
       message.error("加载 Webhook 列表失败");
     } finally {
@@ -286,8 +286,8 @@ function ScheduleTab({ workflows }: { workflows: WorkflowItem[] }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await scheduleApi.list();
-      setSchedules(data);
+      const data = await scheduleApi.list() as any;
+      setSchedules(data.items ?? data);
     } catch {
       message.error("加载定时任务列表失败");
     } finally {
