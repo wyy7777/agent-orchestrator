@@ -41,7 +41,7 @@ export default function SandboxesPage() {
       });
       if (!res.ok) throw new Error("加载失败");
       const data = await res.json();
-      setSandboxes(data);
+      setSandboxes(data.items ?? data);
     } catch (err) {
       message.error("加载沙箱列表失败");
     } finally {
