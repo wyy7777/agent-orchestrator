@@ -23,6 +23,46 @@ from app.models.workflow import Workflow
 logger = logging.getLogger(__name__)
 
 
+async def _execute_with_retry(
+    coro_factory,
+    step_def: StepDefinition,
+    step_exec: StepExecution,
+    label: str = "",
+) -> Any:
+    """带重试的步骤执行。"""
+    retry = step_def.retry
+    max_attempts = max(1, retry.max_attempts)
+    last_error = None
+
+    for attempt in range(max_attempts):
+        try:
+            return await coro_factory()
+        except Exception as e:
+            last_error = e
+            if attempt < max_attempts - 1:
+                if retry.backoff == "exponential":
+                    wait = min(retry.backoff_seconds * (2 ** attempt), 60)
+                else:
+                    wait = retry.backoff_seconds
+                logger.warning(f"[{label}] 第 {attempt+1} 次失败: {e}，{wait}s 后重试")
+                step_exec.output_data = {
+                    "retry_attempt": attempt + 1,
+                    "retry_reason": str(e),
+                    "next_retry_in": wait,
+                }
+                await asyncio.sleep(wait)
+
+    # 所有重试失败
+    if retry.on_failure == "skip":
+        logger.warning(f"[{label}] 重试耗尽，跳过步骤")
+        return {"status": "skipped", "reason": f"重试 {max_attempts} 次后跳过: {last_error}"}
+    elif retry.on_failure == "fallback":
+        logger.warning(f"[{label}] 重试耗尽，使用 fallback")
+        return {"status": "fallback", "reason": str(last_error)}
+    else:
+        raise last_error
+
+
 async def execute_single_step(
     step_exec: StepExecution,
     step_def: StepDefinition,
@@ -31,23 +71,37 @@ async def execute_single_step(
     db: AsyncSession,
     on_step_complete=None,
 ) -> dict[str, Any]:
-    """执行单个步骤，返回输出。超时/异常直接抛出。"""
+    """执行单个步骤，返回输出。支持重试。"""
     handler = _step_handlers.get(step_def.type)
     plugin = get_plugin(step_def.type) if handler is None else None
-    if handler is None and plugin is None:
-        output: dict[str, Any] = {"status": "auto_completed"}
-    elif handler is not None:
-        step_timeout = step_def.timeout or settings.STEP_TIMEOUT_SECONDS
-        output = await asyncio.wait_for(
-            handler().execute(step_def, context, db),
-            timeout=step_timeout,
-        )
-    else:
-        step_timeout = step_def.timeout or settings.STEP_TIMEOUT_SECONDS
-        output = await asyncio.wait_for(
-            plugin.execute(step_def.config or {}, context),
-            timeout=step_timeout,
-        )
+    step_timeout = step_def.timeout or settings.STEP_TIMEOUT_SECONDS
+
+    async def _do_execute():
+        if handler is None and plugin is None:
+            return {"status": "auto_completed"}
+        elif handler is not None:
+            return await asyncio.wait_for(
+                handler().execute(step_def, context, db),
+                timeout=step_timeout,
+            )
+        else:
+            return await asyncio.wait_for(
+                plugin.execute(step_def.config or {}, context),
+                timeout=step_timeout,
+            )
+
+    # 带重试执行
+    output = await _execute_with_retry(
+        _do_execute, step_def, step_exec, label=step_exec.step_name
+    )
+
+    # 检查是否为跳过/fallback
+    if isinstance(output, dict) and output.get("status") in ("skipped", "fallback"):
+        step_exec.status = StepStatus.SKIPPED.value
+        step_exec.output_data = output
+        step_exec.completed_at = datetime.now(timezone.utc)
+        context["results"][step_exec.step_name] = output
+        return output
 
     step_exec.status = StepStatus.COMPLETED.value
     step_exec.output_data = output

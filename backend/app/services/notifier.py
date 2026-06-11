@@ -82,6 +82,80 @@ class DingTalkNotifier(Notifier):
             return False
 
 
+class WeChatWorkNotifier(Notifier):
+    """通过企业微信机器人 Webhook 发送通知。"""
+
+    def __init__(self, webhook_url: str):
+        self.webhook_url = webhook_url
+
+    async def send(self, message: str, level: str = "info") -> bool:
+        emoji_map = {
+            "info": "ℹ️",
+            "success": "✅",
+            "warning": "⚠️",
+            "error": "❌",
+        }
+        emoji = emoji_map.get(level, "📢")
+        payload = {
+            "msgtype": "markdown",
+            "markdown": {
+                "content": f"{emoji} **Agent Orchestrator**\n\n{message}",
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(self.webhook_url, json=payload)
+                data = resp.json()
+                if data.get("errcode") == 0:
+                    return True
+                logger.warning(f"企业微信通知返回异常: {data}")
+                return False
+        except Exception as e:
+            logger.error(f"企业微信通知发送失败: {e}")
+            return False
+
+
+class FeishuNotifier(Notifier):
+    """通过飞书机器人 Webhook 发送通知。"""
+
+    def __init__(self, webhook_url: str):
+        self.webhook_url = webhook_url
+
+    async def send(self, message: str, level: str = "info") -> bool:
+        emoji_map = {
+            "info": "ℹ️",
+            "success": "✅",
+            "warning": "⚠️",
+            "error": "❌",
+        }
+        emoji = emoji_map.get(level, "📢")
+        payload = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {"tag": "plain_text", "content": f"{emoji} Agent Orchestrator"},
+                    "template": {"info": "blue", "success": "green", "warning": "orange", "error": "red"}.get(level, "blue"),
+                },
+                "elements": [
+                    {"tag": "markdown", "content": message},
+                ],
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(self.webhook_url, json=payload)
+                data = resp.json()
+                if data.get("code") == 0 or data.get("StatusCode") == 0:
+                    return True
+                logger.warning(f"飞书通知返回异常: {data}")
+                return False
+        except Exception as e:
+            logger.error(f"飞书通知发送失败: {e}")
+            return False
+
+
 class ConsoleNotifier(Notifier):
     """将通知打印到控制台（默认实现）。"""
 
@@ -159,6 +233,12 @@ def build_notification_manager() -> NotificationManager:
 
     if settings.DINGTALK_WEBHOOK_URL:
         manager.add_notifier(DingTalkNotifier(settings.DINGTALK_WEBHOOK_URL))
+
+    if settings.WECHAT_WORK_WEBHOOK_URL:
+        manager.add_notifier(WeChatWorkNotifier(settings.WECHAT_WORK_WEBHOOK_URL))
+
+    if settings.FEISHU_WEBHOOK_URL:
+        manager.add_notifier(FeishuNotifier(settings.FEISHU_WEBHOOK_URL))
 
     return manager
 

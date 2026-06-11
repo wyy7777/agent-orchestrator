@@ -16,6 +16,7 @@ from app.database import init_db
 from app.logging_config import setup_logging
 from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications, plugins
 from app.api import sandboxes
+from app.api import audit
 from app.api.auth import router as auth_router
 from app.services.ws_manager import ws_manager
 from app.services.scheduler import scheduler
@@ -135,6 +136,7 @@ app.include_router(schedules.router)
 app.include_router(notifications.router)
 app.include_router(plugins.router)
 app.include_router(sandboxes.router)
+app.include_router(audit.router)
 
 
 # API Key 认证中间件

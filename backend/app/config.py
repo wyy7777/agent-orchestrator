@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     # 通知
     SLACK_WEBHOOK_URL: str = ""
     DINGTALK_WEBHOOK_URL: str = ""
+    WECHAT_WORK_WEBHOOK_URL: str = ""
+    FEISHU_WEBHOOK_URL: str = ""
     NOTIFY_ON_TASK_COMPLETE: bool = True
     NOTIFY_ON_TASK_FAIL: bool = True
     NOTIFY_ON_APPROVAL_NEEDED: bool = True

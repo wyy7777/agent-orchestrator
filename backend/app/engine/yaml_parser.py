@@ -9,9 +9,18 @@ from app.config import settings
 
 
 @dataclass
+class RetryConfig:
+    """重试配置。"""
+    max_attempts: int = 1  # 最大尝试次数（1 = 不重试）
+    backoff: str = "exponential"  # exponential / fixed
+    backoff_seconds: float = 2.0  # 基础退避秒数
+    on_failure: str = "fail"  # fail / skip / fallback
+
+
+@dataclass
 class StepDefinition:
     name: str
-    type: str  # analyze / execute / review / approval / merge / subtask / loop
+    type: str  # analyze / execute / review / approval / merge / subtask / loop / condition
     config: dict[str, Any] = field(default_factory=dict)
     prompt_template: str | None = None
     timeout: int = field(default_factory=lambda: settings.DEFAULT_STEP_TIMEOUT)
@@ -22,6 +31,7 @@ class StepDefinition:
     loop_items: str | None = None  # 循环数据源 key
     max_iterations: int = field(default_factory=lambda: settings.DEFAULT_MAX_ITERATIONS)
     subtask_workflow: str | None = None  # 子工作流 ID
+    retry: RetryConfig = field(default_factory=RetryConfig)  # 重试配置
 
 
 @dataclass
@@ -115,6 +125,15 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                         )
                     )
 
+        # 解析重试配置
+        retry_data = step_data.get("retry", {})
+        retry_config = RetryConfig(
+            max_attempts=retry_data.get("max_attempts", 1),
+            backoff=retry_data.get("backoff", "exponential"),
+            backoff_seconds=retry_data.get("backoff_seconds", 2.0),
+            on_failure=retry_data.get("on_failure", "fail"),
+        ) if retry_data else RetryConfig()
+
         steps.append(
             StepDefinition(
                 name=step_name,
@@ -129,6 +148,7 @@ def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
                 loop_items=step_data.get("loop_items"),
                 max_iterations=step_data.get("max_iterations", settings.DEFAULT_MAX_ITERATIONS),
                 subtask_workflow=step_data.get("subtask_workflow"),
+                retry=retry_config,
             )
         )
 

@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentResponse, get_agent, _get_friendly_error
+from app.agents.schemas import AnalysisOutput, ExecuteOutput, ReviewOutput, validate_agent_output
 from app.config import settings
 from app.engine.state_machine import StepHandler, register_handler
 from app.engine.yaml_parser import StepDefinition
@@ -56,8 +57,12 @@ class AnalyzeHandler(StepHandler):
         except Exception as e:
             raise RuntimeError(_get_friendly_error(e)) from e
 
+        # 结构化输出校验
+        validated = validate_agent_output(response.content, AnalysisOutput)
+        analysis = validated if validated else (response.parsed or {"raw": response.content})
+
         return {
-            "analysis": response.parsed or {"raw": response.content},
+            "analysis": analysis,
             "tokens_used": response.tokens_used,
             "model": response.model,
         }
