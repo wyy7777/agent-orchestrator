@@ -19,24 +19,22 @@ const { TextArea } = Input;
 interface WebhookItem {
   id: string;
   name: string;
-  url: string;
-  secret: string | null;
-  workflow_id: string;
-  events: string[];
-  enabled: boolean;
+  webhook_type: string;
+  target_workflow_id: string;
+  auth_type: string;
+  auth_config: Record<string, unknown> | null;
+  config: Record<string, unknown> | null;
   created_at: string;
 }
 
 interface ScheduleItem {
   id: string;
-  name: string;
   workflow_id: string;
-  cron: string;
+  cron_expr: string;
   payload: Record<string, unknown>;
   enabled: boolean;
-  last_run_at: string | null;
-  next_run_at: string | null;
   created_at: string;
+  last_triggered_at: string | null;
 }
 
 // ==================== API 封装 ====================
@@ -58,7 +56,7 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
 const webhookApi = {
   list: () => apiRequest<WebhookItem[]>("/api/webhooks"),
-  create: (data: Omit<WebhookItem, "id" | "url" | "created_at">) =>
+  create: (data: { name: string; webhook_type: string; target_workflow_id: string; secret?: string | null }) =>
     apiRequest<WebhookItem>("/api/webhooks", {
       method: "POST",
       body: JSON.stringify(data),
@@ -69,7 +67,7 @@ const webhookApi = {
 
 const scheduleApi = {
   list: () => apiRequest<ScheduleItem[]>("/api/schedules"),
-  create: (data: Omit<ScheduleItem, "id" | "last_run_at" | "next_run_at" | "created_at">) =>
+  create: (data: { workflow_id: string; cron_expr: string; payload?: Record<string, unknown> | null }) =>
     apiRequest<ScheduleItem>("/api/schedules", {
       method: "POST",
       body: JSON.stringify(data),
@@ -110,10 +108,9 @@ function WebhookTab({ workflows }: { workflows: WorkflowItem[] }) {
       const values = await form.validateFields();
       await webhookApi.create({
         name: values.name,
+        webhook_type: "generic",
+        target_workflow_id: values.workflow_id,
         secret: values.secret || null,
-        workflow_id: values.workflow_id,
-        events: values.events || [],
-        enabled: true,
       });
       message.success("Webhook 创建成功");
       setModalOpen(false);
@@ -147,43 +144,22 @@ function WebhookTab({ workflows }: { workflows: WorkflowItem[] }) {
       dataIndex: "name",
     },
     {
-      title: "Webhook URL",
-      dataIndex: "url",
-      render: (url: string) => (
-        <Space>
-          <Text code copyable={false} style={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis" }}>
-            {url}
-          </Text>
-          <Tooltip title="复制 URL">
-            <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(url)} />
-          </Tooltip>
-        </Space>
-      ),
+      title: "类型",
+      dataIndex: "webhook_type",
+      render: (t: string) => <Tag color={t === "github" ? "green" : "blue"}>{t}</Tag>,
     },
     {
       title: "关联工作流",
-      dataIndex: "workflow_id",
+      dataIndex: "target_workflow_id",
       render: (wfId: string) => {
         const wf = workflows.find((w) => w.id === wfId);
         return wf?.name || wfId.substring(0, 8);
       },
     },
     {
-      title: "事件",
-      dataIndex: "events",
-      render: (events: string[]) =>
-        events?.length > 0
-          ? events.map((e) => <Tag key={e} color="blue">{e}</Tag>)
-          : <Text type="secondary">全部</Text>,
-    },
-    {
-      title: "状态",
-      dataIndex: "enabled",
-      render: (enabled: boolean) => (
-        <Tag color={enabled ? "success" : "default"} icon={enabled ? <CheckCircleOutlined /> : <PauseCircleOutlined />}>
-          {enabled ? "启用" : "禁用"}
-        </Tag>
-      ),
+      title: "认证方式",
+      dataIndex: "auth_type",
+      render: (t: string) => <Tag>{t}</Tag>,
     },
     {
       title: "创建时间",
@@ -310,11 +286,9 @@ function ScheduleTab({ workflows }: { workflows: WorkflowItem[] }) {
         }
       }
       await scheduleApi.create({
-        name: values.name,
         workflow_id: values.workflow_id,
-        cron: values.cron,
-        payload,
-        enabled: true,
+        cron_expr: values.cron,
+        payload: payload || null,
       });
       message.success("定时任务创建成功");
       setModalOpen(false);
@@ -347,10 +321,6 @@ function ScheduleTab({ workflows }: { workflows: WorkflowItem[] }) {
 
   const columns = [
     {
-      title: "名称",
-      dataIndex: "name",
-    },
-    {
       title: "关联工作流",
       dataIndex: "workflow_id",
       render: (wfId: string) => {
@@ -360,7 +330,7 @@ function ScheduleTab({ workflows }: { workflows: WorkflowItem[] }) {
     },
     {
       title: "Cron 表达式",
-      dataIndex: "cron",
+      dataIndex: "cron_expr",
       render: (cron: string) => <Tag color="purple">{cron}</Tag>,
     },
     {
@@ -372,13 +342,8 @@ function ScheduleTab({ workflows }: { workflows: WorkflowItem[] }) {
       ),
     },
     {
-      title: "上次运行",
-      dataIndex: "last_run_at",
-      render: (v: string | null) => v ? new Date(v).toLocaleString("zh-CN") : <Text type="secondary">-</Text>,
-    },
-    {
-      title: "下次运行",
-      dataIndex: "next_run_at",
+      title: "上次触发",
+      dataIndex: "last_triggered_at",
       render: (v: string | null) => v ? new Date(v).toLocaleString("zh-CN") : <Text type="secondary">-</Text>,
     },
     {

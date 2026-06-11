@@ -56,6 +56,15 @@ class WorkflowScheduler:
             return True
         return False
 
+    def toggle_schedule(self, schedule_id: str, enabled: bool) -> Schedule | None:
+        """启用/禁用一条调度配置。"""
+        schedule = self._schedules.get(schedule_id)
+        if not schedule:
+            return None
+        schedule.enabled = enabled
+        logger.info(f"调度 {schedule_id} 已{'启用' if enabled else '禁用'}")
+        return schedule
+
     def list_schedules(self) -> list[Schedule]:
         """列出所有调度配置。"""
         return list(self._schedules.values())

@@ -50,6 +50,26 @@ async def list_schedules():
     )
 
 
+@router.patch("/{schedule_id}", response_model=ScheduleResponse)
+async def toggle_schedule(schedule_id: str, body: dict):
+    """启用/禁用一条调度配置。"""
+    enabled = body.get("enabled")
+    if enabled is None:
+        raise HTTPException(status_code=400, detail="缺少 enabled 字段")
+    schedule = scheduler.toggle_schedule(schedule_id, enabled)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="调度不存在")
+    return ScheduleResponse(
+        id=schedule.id,
+        workflow_id=schedule.workflow_id,
+        cron_expr=schedule.cron_expr,
+        payload=schedule.payload,
+        enabled=schedule.enabled,
+        created_at=schedule.created_at,
+        last_triggered_at=schedule.last_triggered_at,
+    )
+
+
 @router.delete("/{schedule_id}", status_code=204)
 async def delete_schedule(schedule_id: str):
     """删除一条调度配置。"""
