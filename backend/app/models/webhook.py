@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String, Text
-from sqlalchemy.dialects.sqlite import JSON
+from sqlalchemy import JSON, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base

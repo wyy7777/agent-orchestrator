@@ -6,6 +6,9 @@ dist/
 build/
 *.egg
 .eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Virtual environment
 venv/
@@ -13,7 +16,11 @@ venv/
 
 # Database
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 
 # Environment
 .env
@@ -70,6 +77,4 @@ docs/路线图.md
 # 冗余文件
 backend/examples/
 test_full.py
-*.db-shm
-*.db-wal
 backend/logs/
