@@ -5,7 +5,7 @@
   "build": {
     "frontendDist": "../../frontend/out",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "cd ../../frontend && npm run build",
+    "beforeBuildCommand": "",
     "beforeDevCommand": "cd ../../frontend && npm run dev"
   },
   "bundle": {
@@ -50,12 +50,6 @@
         "https://github.com/reasonix/agent-orchestrator/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM3ODgyOTZBMjQ5NUU5QkpSV1NiWGttaWxvSjRESmVsMU1EbHpwWnVMdXpXRkFEay8ydkwwZE8wbkxnY0hLeDJibU9oUVFKNgo="
-    },
-    "autostart": {
-      "args": ["--minimized"]
-    },
-    "global-shortcut": {
-      "shortcuts": ["CmdOrCtrl+Shift+O"]
     }
   }
 }
