@@ -68,7 +68,10 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": os.environ.get("AGENT_ORCH_DOTENV", ".env"),
+        "env_file_encoding": "utf-8",
+    }
 
     @property
     def cors_origins_list(self) -> list[str]:
