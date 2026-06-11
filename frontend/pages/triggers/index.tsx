@@ -41,7 +41,7 @@ interface ScheduleItem {
 
 // ==================== API 封装 ====================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
 
 async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

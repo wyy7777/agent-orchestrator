@@ -10,7 +10,7 @@ import { useRouter } from "next/router";
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
 
 interface Sandbox {
   task_id: string;

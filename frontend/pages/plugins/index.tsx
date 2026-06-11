@@ -32,7 +32,7 @@ interface PluginItem {
 
 // ==================== API ====================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
 
 async function fetchPlugins(): Promise<PluginItem[]> {
   const res = await fetch(`${API_BASE}/api/plugins`);
@@ -200,7 +200,7 @@ export default function PluginsPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
       const res = await fetch(`${API_BASE}/api/plugins/${selectedPlugin.name}/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

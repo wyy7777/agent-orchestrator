@@ -2,9 +2,7 @@ type MessageHandler = (data: Record<string, unknown>) => void;
 
 function getWsUrl() {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
-  if (typeof window === "undefined") return "ws://localhost:8000/ws";
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/ws`;
+  return "ws://127.0.0.1:18000/ws";
 }
 
 let ws: WebSocket | null = null;
