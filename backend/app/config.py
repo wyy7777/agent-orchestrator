@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "Agent Orchestrator"
-    APP_VERSION: str = "0.2.0"
+    APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
     # 数据库

@@ -43,7 +43,7 @@ async def register(body: UserCreate, db: AsyncSession = Depends(get_db)):
     user = User(
         username=body.username,
         email=body.email,
-        hashed_password=hash_password(body.password),
+        hashed_password=await hash_password(body.password),
         is_admin=(count == 0),
     )
     db.add(user)
@@ -65,7 +65,7 @@ async def login(body: UserLogin, request: Request, db: AsyncSession = Depends(ge
 
     result = await db.execute(select(User).where(User.username == body.username))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(body.password, user.hashed_password):
+    if not user or not await verify_password(body.password, user.hashed_password):
         record_login_failure(client_ip)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if not user.is_active:
@@ -148,7 +148,7 @@ async def update_me(
         current_user.email = body.email
 
     if body.password is not None:
-        current_user.hashed_password = hash_password(body.password)
+        current_user.hashed_password = await hash_password(body.password)
 
     await db.flush()
     await db.refresh(current_user)

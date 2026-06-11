@@ -1,9 +1,23 @@
 import React, { useState, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
+
+const ReactFlow = dynamic(
+  () => import("@xyflow/react").then((m) => m.ReactFlow),
+  { ssr: false }
+);
+const Background = dynamic(
+  () => import("@xyflow/react").then((m) => m.Background),
+  { ssr: false }
+);
+const Controls = dynamic(
+  () => import("@xyflow/react").then((m) => m.Controls),
+  { ssr: false }
+);
+const MiniMap = dynamic(
+  () => import("@xyflow/react").then((m) => m.MiniMap),
+  { ssr: false }
+);
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,

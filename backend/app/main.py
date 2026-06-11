@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 import time
@@ -81,6 +82,10 @@ async def lifespan(app: FastAPI):
     logger.info("正在初始化数据库...")
     await init_db()
 
+    # 启动速率限制器清理任务
+    global _cleanup_task
+    _cleanup_task = asyncio.create_task(_cleanup_rate_store())
+
     # 崩溃恢复：标记孤儿任务为 failed
     from app.database import async_session
     from app.engine.state_machine import ExecutionEngine
@@ -101,9 +106,24 @@ async def lifespan(app: FastAPI):
 
     scheduler.start_scheduler()
 
+    # 启动通知 worker
+    from app.services.notifier import notifier as _notifier
+    await _notifier.start()
+
     yield
 
+    # 停止速率限制器清理任务
+    if _cleanup_task:
+        _cleanup_task.cancel()
+        try:
+            await _cleanup_task
+        except asyncio.CancelledError:
+            pass
+
     scheduler.stop_scheduler()
+
+    # 关闭通知器 worker + HTTP 客户端
+    await _notifier.close()
 
     from app.services.sandbox import sandbox_manager
 
@@ -165,6 +185,25 @@ app.add_middleware(APIKeyMiddleware)
 _rate_store: dict[str, list[float]] = defaultdict(list)
 
 
+async def _cleanup_rate_store():
+    """后台任务：定期清理过期的速率限制记录。"""
+    while True:
+        await asyncio.sleep(60)
+        now = time.time()
+        window_start = now - settings.RATE_WINDOW
+        expired_ips = [
+            ip for ip, timestamps in _rate_store.items()
+            if not timestamps or all(t <= window_start for t in timestamps)
+        ]
+        for ip in expired_ips:
+            del _rate_store[ip]
+        if expired_ips:
+            logger.debug(f"速率限制器清理：移除 {len(expired_ips)} 个过期 IP 记录")
+
+
+_cleanup_task: asyncio.Task | None = None
+
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     # 跳过 WebSocket 和静态文件
@@ -187,14 +226,8 @@ async def rate_limit_middleware(request: Request, call_next):
     now = time.time()
     window_start = now - settings.RATE_WINDOW
 
-    # 清理过期记录
+    # 清理当前 IP 的过期记录
     _rate_store[client_ip] = [t for t in _rate_store[client_ip] if t > window_start]
-
-    # 定期清理空 IP 条目（每 100 次请求清理一次）
-    if len(_rate_store) > 1000:
-        empty_ips = [ip for ip, times in _rate_store.items() if not times]
-        for ip in empty_ips:
-            del _rate_store[ip]
 
     if len(_rate_store[client_ip]) >= settings.RATE_LIMIT:
         return JSONResponse(

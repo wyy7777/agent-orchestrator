@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Typography, Spin, message, Card, Table, Tag, Button, Space, Row, Col, Empty, Alert, List, Modal, Skeleton } from "antd";
 import {
   PlusOutlined,
@@ -13,7 +14,11 @@ import {
   BellOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
-import { Line, Pie, Column } from "@ant-design/charts";
+
+const Line = dynamic(() => import("@ant-design/charts").then((m) => m.Line), { ssr: false });
+const Pie = dynamic(() => import("@ant-design/charts").then((m) => m.Pie), { ssr: false });
+const Column = dynamic(() => import("@ant-design/charts").then((m) => m.Column), { ssr: false });
+
 import DashboardStats from "@/components/DashboardStats";
 import { dashboardApi, taskApi, workflowApi } from "@/lib/api";
 import type { DashboardStatsData, TaskItem, WorkflowItem } from "@/lib/api";

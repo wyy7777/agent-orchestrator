@@ -4,11 +4,41 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Any
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class AgentErrorCode(str, Enum):
+    """Agent 调用的结构化错误码。"""
+    AUTH_FAILED = "auth_failed"
+    RATE_LIMITED = "rate_limited"
+    TIMEOUT = "timeout"
+    NETWORK_ERROR = "network_error"
+    MODEL_NOT_FOUND = "model_not_found"
+    TOKEN_LIMIT = "token_limit"
+    INVALID_OUTPUT = "invalid_output"
+    UNKNOWN = "unknown"
+
+
+class AgentError(Exception):
+    """Agent 调用异常，携带结构化错误码。"""
+
+    def __init__(self, code: AgentErrorCode, message: str, original: Exception | None = None):
+        self.code = code
+        self.message = message
+        self.original = original
+        super().__init__(message)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "error_code": self.code.value,
+            "message": self.message,
+            "original_error": str(self.original) if self.original else None,
+        }
 
 
 class AgentResponse:
@@ -44,24 +74,30 @@ def _try_parse_json(content: str) -> dict[str, Any] | None:
         return None
 
 
-def _get_friendly_error(error: Exception) -> str:
-    """将技术错误转换为用户友好的提示。"""
+def classify_error(error: Exception) -> tuple[AgentErrorCode, str]:
+    """将技术错误分类为结构化错误码和用户友好的提示。"""
     error_str = str(error).lower()
 
-    if "api key" in error_str or "apikey" in error_str or "unauthorized" in error_str:
-        return "API Key 无效或已过期，请在 .env 中更新 OPENAI_API_KEY 或 ANTHROPIC_API_KEY"
+    if "api key" in error_str or "apikey" in error_str or "unauthorized" in error_str or "401" in error_str:
+        return AgentErrorCode.AUTH_FAILED, "API Key 无效或已过期，请在 .env 中更新 OPENAI_API_KEY 或 ANTHROPIC_API_KEY"
     if "rate limit" in error_str or "429" in error_str:
-        return "API 请求频率超限，请稍后再试"
+        return AgentErrorCode.RATE_LIMITED, "API 请求频率超限，请稍后再试"
     if "timeout" in error_str or "timed out" in error_str:
-        return "AI 响应超时，可使用更小的模型或增加超时时间重试"
-    if "connection" in error_str or "network" in error_str:
-        return "无法连接到 AI 服务，请检查网络连接"
-    if "model" in error_str and "not found" in error_str:
-        return "指定的模型不存在，请检查配置中的模型名称"
-    if "token" in error_str and "limit" in error_str:
-        return "已达到 Token 上限，请升级套餐或等待下月重置"
+        return AgentErrorCode.TIMEOUT, "AI 响应超时，可使用更小的模型或增加超时时间重试"
+    if "connection" in error_str or "network" in error_str or "connect" in error_str:
+        return AgentErrorCode.NETWORK_ERROR, "无法连接到 AI 服务，请检查网络连接"
+    if "model" in error_str and ("not found" in error_str or "does not exist" in error_str):
+        return AgentErrorCode.MODEL_NOT_FOUND, "指定的模型不存在，请检查配置中的模型名称"
+    if "token" in error_str and ("limit" in error_str or "exceeded" in error_str):
+        return AgentErrorCode.TOKEN_LIMIT, "已达到 Token 上限，请升级套餐或等待下月重置"
 
-    return f"AI 调用失败: {error}"
+    return AgentErrorCode.UNKNOWN, f"AI 调用失败: {error}"
+
+
+def _get_friendly_error(error: Exception) -> str:
+    """将技术错误转换为用户友好的提示（保持向后兼容）。"""
+    _, message = classify_error(error)
+    return message
 
 
 async def _retry_with_backoff(coro_factory, max_retries: int = 0, label: str = ""):

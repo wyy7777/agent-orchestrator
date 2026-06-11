@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 import logging
 import secrets
@@ -24,14 +25,24 @@ MAX_LOGIN_FAILURES = 5
 LOCKOUT_SECONDS = 900  # 15 分钟
 
 
-def hash_password(password: str) -> str:
-    """使用 bcrypt 哈希密码。"""
+async def hash_password(password: str) -> str:
+    """使用 bcrypt 哈希密码（在线程池中执行以避免阻塞事件循环）。"""
+    return await asyncio.to_thread(_hash_password_sync, password)
+
+
+def _hash_password_sync(password: str) -> str:
+    """同步 bcrypt 哈希（在线程池中调用）。"""
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """验证密码。"""
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """验证密码（在线程池中执行以避免阻塞事件循环）。"""
+    return await asyncio.to_thread(_verify_password_sync, plain_password, hashed_password)
+
+
+def _verify_password_sync(plain_password: str, hashed_password: str) -> bool:
+    """同步 bcrypt 验证（在线程池中调用）。"""
     return bcrypt.checkpw(
         plain_password.encode("utf-8"),
         hashed_password.encode("utf-8"),
@@ -112,7 +123,7 @@ async def get_current_user(
         user = User(
             username="local",
             email="local@agent-orchestrator",
-            hashed_password=hash_password("local"),
+            hashed_password=await hash_password("local"),
             is_active=True,
             is_admin=True,
         )

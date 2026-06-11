@@ -120,7 +120,10 @@ class ExecuteHandler(StepHandler):
             response = await agent.run(SYSTEM_PROMPT_EXECUTE, user_prompt)
         except Exception as e:
             raise RuntimeError(_get_friendly_error(e)) from e
-        changes = response.parsed or {"raw": response.content}
+
+        # 结构化输出校验
+        validated = validate_agent_output(response.content, ExecuteOutput)
+        changes = validated if validated else (response.parsed or {"raw": response.content})
 
         # 如果配置了 GitHub token 和仓库，则实际写入文件
         git_repo = context.get("git_repo")
@@ -228,8 +231,12 @@ class ReviewHandler(StepHandler):
         except Exception as e:
             raise RuntimeError(_get_friendly_error(e)) from e
 
+        # 结构化输出校验
+        validated = validate_agent_output(response.content, ReviewOutput)
+        review = validated if validated else (response.parsed or {"raw": response.content})
+
         return {
-            "review": response.parsed or {"raw": response.content},
+            "review": review,
             "tokens_used": response.tokens_used,
             "model": response.model,
         }
@@ -331,9 +338,8 @@ class ConditionHandler(StepHandler):
         if not condition:
             return {"evaluated": True, "condition": None, "result": True}
 
-        from app.engine.state_machine import ExecutionEngine
-        engine = ExecutionEngine(db)
-        result = engine._evaluate_condition(condition, context)
+        from app.engine.condition_eval import evaluate_condition
+        result = evaluate_condition(condition, context)
 
         return {
             "evaluated": True,

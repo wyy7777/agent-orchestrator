@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 import yaml
@@ -44,9 +46,45 @@ class WorkflowDefinition:
 
 VALID_STEP_TYPES = {"analyze", "execute", "review", "approval", "merge", "script", "subtask", "loop", "condition"}
 
+# YAML 解析缓存：key=yaml_str 的 hash，value=(WorkflowDefinition, timestamp)
+_parse_cache: dict[str, tuple[WorkflowDefinition, float]] = {}
+_CACHE_MAX_SIZE = 128
+_CACHE_TTL = 300  # 5 分钟
+
+
+def _cache_key(yaml_str: str) -> str:
+    """生成缓存键。"""
+    return hashlib.md5(yaml_str.encode("utf-8")).hexdigest()
+
 
 def parse_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
-    """解析 YAML 工作流定义，返回结构化的 WorkflowDefinition。"""
+    """解析 YAML 工作流定义，返回结构化的 WorkflowDefinition。带 LRU 缓存。"""
+    import time
+
+    cache_key = _cache_key(yaml_str)
+
+    # 检查缓存
+    if cache_key in _parse_cache:
+        result, cached_at = _parse_cache[cache_key]
+        if time.time() - cached_at < _CACHE_TTL:
+            return result
+        else:
+            del _parse_cache[cache_key]
+
+    # 缓存未命中，解析
+    result = _parse_workflow_yaml_impl(yaml_str)
+
+    # 写入缓存（如果超过容量，清理最旧的条目）
+    if len(_parse_cache) >= _CACHE_MAX_SIZE:
+        oldest_key = min(_parse_cache, key=lambda k: _parse_cache[k][1])
+        del _parse_cache[oldest_key]
+    _parse_cache[cache_key] = (result, time.time())
+
+    return result
+
+
+def _parse_workflow_yaml_impl(yaml_str: str) -> WorkflowDefinition:
+    """实际的 YAML 解析实现（无缓存）。"""
     try:
         data = yaml.safe_load(yaml_str)
     except yaml.YAMLError as e:

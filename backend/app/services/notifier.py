@@ -13,10 +13,22 @@ logger = logging.getLogger(__name__)
 class Notifier(ABC):
     """通知接口抽象基类。"""
 
+    # 共享 HTTP 客户端（由 NotificationManager 统一管理）
+    _shared_client: httpx.AsyncClient | None = None
+
     @abstractmethod
     async def send(self, message: str, level: str = "info") -> bool:
         """发送通知。level: info / warning / error / success"""
         ...
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """获取共享 HTTP 客户端。"""
+        if Notifier._shared_client is None or Notifier._shared_client.is_closed:
+            Notifier._shared_client = httpx.AsyncClient(
+                timeout=10,
+                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            )
+        return Notifier._shared_client
 
 
 class SlackNotifier(Notifier):
@@ -36,12 +48,12 @@ class SlackNotifier(Notifier):
         payload = {"text": f"{emoji} {message}"}
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(self.webhook_url, json=payload)
-                if resp.status_code == 200 and resp.text == "ok":
-                    return True
-                logger.warning(f"Slack 通知返回异常: status={resp.status_code}, body={resp.text}")
-                return False
+            client = await self._get_client()
+            resp = await client.post(self.webhook_url, json=payload)
+            if resp.status_code == 200 and resp.text == "ok":
+                return True
+            logger.warning(f"Slack 通知返回异常: status={resp.status_code}, body={resp.text}")
+            return False
         except Exception as e:
             logger.error(f"Slack 通知发送失败: {e}")
             return False
@@ -70,13 +82,13 @@ class DingTalkNotifier(Notifier):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(self.webhook_url, json=payload)
-                data = resp.json()
-                if data.get("errcode") == 0:
-                    return True
-                logger.warning(f"钉钉通知返回异常: {data}")
-                return False
+            client = await self._get_client()
+            resp = await client.post(self.webhook_url, json=payload)
+            data = resp.json()
+            if data.get("errcode") == 0:
+                return True
+            logger.warning(f"钉钉通知返回异常: {data}")
+            return False
         except Exception as e:
             logger.error(f"钉钉通知发送失败: {e}")
             return False
@@ -104,13 +116,13 @@ class WeChatWorkNotifier(Notifier):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(self.webhook_url, json=payload)
-                data = resp.json()
-                if data.get("errcode") == 0:
-                    return True
-                logger.warning(f"企业微信通知返回异常: {data}")
-                return False
+            client = await self._get_client()
+            resp = await client.post(self.webhook_url, json=payload)
+            data = resp.json()
+            if data.get("errcode") == 0:
+                return True
+            logger.warning(f"企业微信通知返回异常: {data}")
+            return False
         except Exception as e:
             logger.error(f"企业微信通知发送失败: {e}")
             return False
@@ -144,13 +156,13 @@ class FeishuNotifier(Notifier):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(self.webhook_url, json=payload)
-                data = resp.json()
-                if data.get("code") == 0 or data.get("StatusCode") == 0:
-                    return True
-                logger.warning(f"飞书通知返回异常: {data}")
-                return False
+            client = await self._get_client()
+            resp = await client.post(self.webhook_url, json=payload)
+            data = resp.json()
+            if data.get("code") == 0 or data.get("StatusCode") == 0:
+                return True
+            logger.warning(f"飞书通知返回异常: {data}")
+            return False
         except Exception as e:
             logger.error(f"飞书通知发送失败: {e}")
             return False
@@ -171,22 +183,64 @@ class ConsoleNotifier(Notifier):
 
 
 class NotificationManager:
-    """通知管理器，聚合多个 Notifier 实例统一发送。"""
+    """通知管理器，聚合多个 Notifier 实例统一发送。
+    使用 asyncio.Queue + worker 实现背压，防止大量通知同时发出。
+    """
 
-    def __init__(self):
+    def __init__(self, max_workers: int = 2, queue_size: int = 100):
         self.notifiers: list[Notifier] = []
+        self._queue: asyncio.Queue[tuple[str, str] | None] = asyncio.Queue(maxsize=queue_size)
+        self._workers: list[asyncio.Task] = []
+        self._max_workers = max_workers
+        self._started = False
 
     def add_notifier(self, notifier: Notifier) -> None:
         self.notifiers.append(notifier)
 
+    async def start(self):
+        """启动 worker 协程（在 lifespan 中调用）。"""
+        if self._started:
+            return
+        for i in range(self._max_workers):
+            task = asyncio.create_task(self._worker(f"notif-worker-{i}"))
+            self._workers.append(task)
+        self._started = True
+
+    async def stop(self):
+        """停止所有 worker（在 lifespan 中调用）。"""
+        for _ in self._workers:
+            await self._queue.put(None)  # 发送哨兵值
+        await asyncio.gather(*self._workers, return_exceptions=True)
+        self._workers.clear()
+        self._started = False
+
+    async def _worker(self, name: str):
+        """后台 worker：从队列取通知并发送。"""
+        while True:
+            item = await self._queue.get()
+            if item is None:  # 哨兵值，退出
+                break
+            message, level = item
+            for n in self.notifiers:
+                try:
+                    await n.send(message, level)
+                except Exception as e:
+                    logger.error(f"通知发送异常 ({n.__class__.__name__}): {e}")
+
+    async def close(self):
+        """关闭共享 HTTP 客户端和 worker。"""
+        await self.stop()
+        if Notifier._shared_client and not Notifier._shared_client.is_closed:
+            await Notifier._shared_client.aclose()
+            Notifier._shared_client = None
+
     async def notify(self, message: str, level: str = "info") -> None:
         if not self.notifiers:
             return
-        for notifier in self.notifiers:
-            try:
-                await notifier.send(message, level)
-            except Exception as e:
-                logger.error(f"通知发送异常 ({notifier.__class__.__name__}): {e}")
+        try:
+            self._queue.put_nowait((message, level))
+        except asyncio.QueueFull:
+            logger.warning("通知队列已满，丢弃通知")
 
     # ---- 便捷触发方法 ----
 

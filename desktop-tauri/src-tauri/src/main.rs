@@ -3,11 +3,12 @@
 
 use std::sync::Mutex;
 use tauri::{
-    AppHandle, Manager, Runtime,
+    AppHandle, Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 struct BackendState {
     child: Mutex<Option<tauri_plugin_shell::process::CommandChild>>,
