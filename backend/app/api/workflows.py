@@ -235,3 +235,18 @@ async def export_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
         "yaml": workflow.yaml_definition,
         "filename": f"{workflow.name.replace(' ', '_')}.yaml",
     }
+
+
+@router.get("/{workflow_id}/circuit-breaker")
+async def get_circuit_breaker_status(workflow_id: str):
+    """获取工作流断路器状态。"""
+    from app.engine.circuit_breaker import circuit_breaker
+    return circuit_breaker.get_status(workflow_id)
+
+
+@router.post("/{workflow_id}/circuit-breaker/reset")
+async def reset_circuit_breaker(workflow_id: str):
+    """手动重置工作流断路器。"""
+    from app.engine.circuit_breaker import circuit_breaker
+    circuit_breaker.reset(workflow_id)
+    return {"status": "reset", "workflow_id": workflow_id}

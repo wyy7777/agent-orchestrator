@@ -61,6 +61,11 @@ class ExecutionEngine:
         if task.status not in (TaskStatus.PENDING.value, TaskStatus.FAILED.value):
             raise ValueError(f"任务 {task_id} 当前状态为 {task.status}，无法启动")
 
+        # 断路器检查
+        from app.engine.circuit_breaker import circuit_breaker
+        if circuit_breaker.is_open(task.workflow_id):
+            raise ValueError("断路器已打开，该工作流连续失败次数过多，请稍后再试")
+
         workflow_def = parse_workflow_yaml(task.workflow.yaml_definition)
 
         # 创建步骤执行记录
@@ -215,6 +220,10 @@ class ExecutionEngine:
                 await db.commit()
                 logger.info(f"任务 {task_id} 完成")
                 await self._emit("task_completed", task_id, workflow_def.name)
+
+                # 断路器：记录成功
+                from app.engine.circuit_breaker import circuit_breaker
+                circuit_breaker.record_success(task.workflow_id)
 
         except Exception as e:
             logger.error(f"工作流执行异常: {e}", exc_info=True)
@@ -412,6 +421,10 @@ class ExecutionEngine:
         for name in failed_names:
             await self._emit("step_failed", task_id, name, "超时" if timeout else error_msg)
         await self._emit("task_failed", task_id, workflow_name, task.error_message)
+
+        # 断路器：记录失败
+        from app.engine.circuit_breaker import circuit_breaker
+        circuit_breaker.record_failure(task.workflow_id)
 
     async def _emit_step_completed(self, task_id: str, step_name: str):
         """步骤完成事件。"""
