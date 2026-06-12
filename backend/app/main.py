@@ -181,6 +181,21 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 app.add_middleware(APIKeyMiddleware)
 
 
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    """记录每个请求的耗时。"""
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    # 只记录 API 请求，跳过静态文件
+    if request.url.path.startswith("/api/"):
+        logger.info(
+            f"{request.method} {request.url.path} → {response.status_code} ({duration_ms:.1f}ms)"
+        )
+    response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
+    return response
+
+
 # 简单的内存 Rate Limiter
 _rate_store: dict[str, list[float]] = defaultdict(list)
 
