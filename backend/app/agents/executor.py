@@ -346,3 +346,78 @@ class ConditionHandler(StepHandler):
             "condition": condition,
             "result": result,
         }
+
+
+@register_handler("script")
+class ScriptHandler(StepHandler):
+    """脚本步骤：执行 shell 命令。"""
+
+    async def execute(
+        self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
+        import asyncio
+
+        command = step.config.get("command")
+        if not command:
+            return {"status": "skipped", "reason": "未配置 command", "exit_code": -1}
+
+        # 替换模板变量
+        for key, value in context.items():
+            if isinstance(value, str):
+                command = command.replace(f"{{{key}}}", value)
+
+        timeout = step.timeout or 60
+        cwd = step.config.get("cwd")
+
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout
+            )
+            output = stdout.decode("utf-8", errors="replace")
+            error = stderr.decode("utf-8", errors="replace")
+
+            return {
+                "status": "success" if proc.returncode == 0 else "failed",
+                "exit_code": proc.returncode,
+                "output": output[:10000],
+                "error": error[:5000] if error else None,
+            }
+        except asyncio.TimeoutError:
+            proc.kill()
+            return {"status": "timeout", "exit_code": -1, "error": f"命令超时 ({timeout}s)"}
+        except Exception as e:
+            return {"status": "error", "exit_code": -1, "error": str(e)}
+
+
+@register_handler("subtask")
+class SubtaskHandler(StepHandler):
+    """子任务步骤：暂存 stub，自动完成。"""
+
+    async def execute(
+        self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
+        logger.warning(f"subtask 步骤尚未实现: {step.name}")
+        return {
+            "status": "stub",
+            "message": f"subtask 步骤 '{step.name}' 尚未实现，自动跳过",
+        }
+
+
+@register_handler("loop")
+class LoopHandler(StepHandler):
+    """循环步骤：暂存 stub，自动完成。"""
+
+    async def execute(
+        self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
+        logger.warning(f"loop 步骤尚未实现: {step.name}")
+        return {
+            "status": "stub",
+            "message": f"loop 步骤 '{step.name}' 尚未实现，自动跳过",
+        }
