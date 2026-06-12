@@ -70,3 +70,69 @@ async def list_audit_logs(
         "page": page,
         "page_size": page_size,
     }
+
+
+@router.post("/report")
+async def generate_audit_report(
+    start_date: str = Query(..., description="起始日期 YYYY-MM-DD"),
+    end_date: str = Query(..., description="截止日期 YYYY-MM-DD"),
+    format: str = Query("csv", description="格式: csv"),
+    db: AsyncSession = Depends(get_db),
+):
+    """生成合规审计报告（CSV），含 SHA-256 签名。"""
+    import csv
+    import hashlib
+    import io
+    from datetime import datetime as dt
+    from fastapi.responses import StreamingResponse
+    from app.models.task import Task
+    from app.models.step_execution import StepExecution
+    from sqlalchemy.orm import selectinload
+
+    start_dt = dt.fromisoformat(start_date)
+    end_dt = dt.fromisoformat(end_date + "T23:59:59")
+
+    # 查询任务
+    result = await db.execute(
+        select(Task)
+        .options(selectinload(Task.step_executions))
+        .where(Task.created_at >= start_dt, Task.created_at <= end_dt)
+        .order_by(Task.created_at)
+    )
+    tasks = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "task_id", "workflow_name", "status", "trigger_type",
+        "started_at", "completed_at", "total_tokens",
+        "steps_completed", "steps_failed", "error_message",
+    ])
+
+    for t in tasks:
+        completed = sum(1 for s in t.step_executions if s.status == "completed")
+        failed = sum(1 for s in t.step_executions if s.status == "failed")
+        writer.writerow([
+            t.id,
+            t.workflow.name if t.workflow else "",
+            t.status,
+            t.trigger_type or "",
+            t.started_at.isoformat() if t.started_at else "",
+            t.completed_at.isoformat() if t.completed_at else "",
+            t.total_tokens_used,
+            completed,
+            failed,
+            (t.error_message or "")[:200],
+        ])
+
+    content = output.getvalue()
+    sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=audit_report_{start_date}_{end_date}.csv",
+            "X-Report-SHA256": sha256,
+        },
+    )
