@@ -41,6 +41,7 @@ class TaskResponse(BaseModel):
     total_tokens_used: int = 0
     error_message: str | None = None
     pr_url: str | None = None
+    workflow_snapshot: str | None = None
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None

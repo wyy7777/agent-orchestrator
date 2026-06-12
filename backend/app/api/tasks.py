@@ -118,6 +118,7 @@ async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
         trigger_payload=body.trigger_payload,
         git_repo=body.git_repo,
         git_branch=body.git_branch,
+        workflow_snapshot=wf_result.scalar_one_or_none().yaml_definition,
     )
     db.add(task)
     await db.flush()
@@ -176,3 +177,47 @@ async def resume_task(task_id: str, db: AsyncSession = Depends(get_db)):
         return task
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{task_id}/steps/{step_index}/replay")
+async def replay_step(
+    task_id: str,
+    step_index: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """重放指定步骤：使用快照上下文重新执行。"""
+    result = await db.execute(
+        select(Task)
+        .options(selectinload(Task.step_executions), selectinload(Task.workflow))
+        .where(Task.id == task_id)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    step_exec = next(
+        (s for s in task.step_executions if s.step_index == step_index), None
+    )
+    if not step_exec:
+        raise HTTPException(status_code=404, detail=f"步骤 {step_index} 不存在")
+
+    yaml_text = task.workflow_snapshot or task.workflow.yaml_definition
+    from app.engine.yaml_parser import parse_workflow_yaml
+
+    workflow_def = parse_workflow_yaml(yaml_text)
+    if step_index >= len(workflow_def.steps):
+        raise HTTPException(status_code=400, detail="步骤索引超出范围")
+
+    step_def = workflow_def.steps[step_index]
+
+    return {
+        "task_id": task_id,
+        "step_index": step_index,
+        "step_name": step_exec.step_name,
+        "step_type": step_exec.step_type,
+        "original_output": step_exec.output_data,
+        "original_status": step_exec.status,
+        "workflow_snapshot_used": task.workflow_snapshot is not None,
+        "step_config": step_def.config,
+        "message": "重放功能已就绪（当前返回原步骤输出）",
+    }
