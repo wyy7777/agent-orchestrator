@@ -120,6 +120,11 @@ async def execute_single_step(
     logger.info(f"步骤 '{step_exec.step_name}' 完成, tokens={tokens}")
     if on_step_complete:
         await on_step_complete(context["task_id"], step_exec.step_name)
+
+    # 异步质量评分（fire-and-forget）
+    if step_def.type in ("execute", "review", "analyze"):
+        asyncio.create_task(_evaluate_quality(step_exec, step_def, output, context, db))
+
     return output
 
 
@@ -274,3 +279,31 @@ async def execute_loop_step(
         "iterations": len(items),
         "results": loop_results,
     }
+
+
+async def _evaluate_quality(
+    step_exec: StepExecution,
+    step_def: StepDefinition,
+    output: dict[str, Any],
+    context: dict[str, Any],
+    db: AsyncSession,
+):
+    """异步质量评分（fire-and-forget）。"""
+    try:
+        from app.database import async_session
+        from app.services.quality_evaluator import quality_evaluator
+
+        score = await quality_evaluator.evaluate(step_def.type, output, context)
+
+        # 用独立 session 写回评分
+        async with async_session() as write_db:
+            result = await write_db.execute(
+                select(StepExecution).where(StepExecution.id == step_exec.id)
+            )
+            se = result.scalar_one_or_none()
+            if se:
+                se.quality_score = score
+                await write_db.commit()
+                logger.info(f"质量评分已写入: {step_exec.step_name} → {score}")
+    except Exception as e:
+        logger.warning(f"质量评分写入失败: {e}")

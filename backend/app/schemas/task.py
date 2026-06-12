@@ -13,6 +13,7 @@ class StepExecutionResponse(BaseModel):
     ai_model: str | None = None
     token_usage: dict | None = None
     error_message: str | None = None
+    quality_score: dict | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
 

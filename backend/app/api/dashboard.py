@@ -309,3 +309,50 @@ async def export_dashboard_data(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/quality-trends")
+async def quality_trends(
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回近 N 天的质量评分趋势（按日聚合）。"""
+    from app.models.step_execution import StepExecution
+
+    now = datetime.now(timezone.utc)
+    start_date = now - timedelta(days=days)
+
+    result = await db.execute(
+        select(StepExecution).where(
+            StepExecution.completed_at >= start_date,
+            StepExecution.quality_score.isnot(None),
+        )
+    )
+    steps = result.scalars().all()
+
+    # 按日期聚合
+    daily: dict[str, list[dict]] = {}
+    for s in steps:
+        if not s.completed_at:
+            continue
+        day_key = s.completed_at.strftime("%Y-%m-%d")
+        if day_key not in daily:
+            daily[day_key] = []
+        daily[day_key].append(s.quality_score)
+
+    trends = []
+    for day in sorted(daily.keys()):
+        scores = daily[day]
+        valid = [s for s in scores if s.get("correctness", -1) >= 0]
+        if not valid:
+            continue
+        trends.append({
+            "date": day,
+            "count": len(valid),
+            "avg_correctness": round(sum(s["correctness"] for s in valid) / len(valid), 1),
+            "avg_completeness": round(sum(s["completeness"] for s in valid) / len(valid), 1),
+            "avg_security": round(sum(s["security"] for s in valid) / len(valid), 1),
+            "avg_style": round(sum(s["style"] for s in valid) / len(valid), 1),
+        })
+
+    return {"trends": trends}
