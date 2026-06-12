@@ -147,6 +147,41 @@ async def require_admin(
     return current_user
 
 
+# 角色层级：admin > manager > operator > viewer
+ROLE_HIERARCHY = {
+    "admin": 4,
+    "manager": 3,
+    "operator": 2,
+    "viewer": 1,
+}
+
+
+def require_role(*allowed_roles: str):
+    """
+    角色权限依赖工厂。
+    用法: Depends(require_role("admin", "manager"))
+    """
+    async def checker(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        user_role = current_user.role or "operator"
+        # 管理员始终放行
+        if user_role == "admin":
+            return current_user
+        # 检查角色是否在允许列表
+        if user_role not in allowed_roles:
+            # 检查层级：如果用户角色层级 >= 任一允许角色的层级，放行
+            user_level = ROLE_HIERARCHY.get(user_role, 0)
+            max_allowed_level = max(ROLE_HIERARCHY.get(r, 0) for r in allowed_roles)
+            if user_level < max_allowed_level:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"权限不足，需要角色: {'/'.join(allowed_roles)}",
+                )
+        return current_user
+    return checker
+
+
 def ensure_secret_key():
     """确保 SECRET_KEY 已配置。未配置时自动生成并保存到 .env。"""
     if not settings.SECRET_KEY:
