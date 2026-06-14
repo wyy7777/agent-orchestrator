@@ -10,6 +10,7 @@ from app.agents.base import AgentResponse, get_agent, _get_friendly_error
 from app.agents.schemas import AnalysisOutput, ExecuteOutput, ReviewOutput, validate_agent_output
 from app.config import settings
 from app.engine.state_machine import StepHandler, register_handler
+from app.engine.types import StepResult
 from app.engine.yaml_parser import StepDefinition
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class AnalyzeHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         provider = step.config.get("provider", settings.DEFAULT_AI_PROVIDER)
         model = step.config.get("model")
         agent = get_agent(provider, model)
@@ -54,18 +55,91 @@ class AnalyzeHandler(StepHandler):
 
         try:
             response = await agent.run(SYSTEM_PROMPT_ANALYZE, user_prompt)
+            validated = validate_agent_output(response.content, AnalysisOutput)
+            analysis = validated if validated else (response.parsed or {"raw": response.content})
+
+            return StepResult(
+                status="completed",
+                output={"analysis": analysis},
+                tokens_used=response.tokens_used,
+                model=response.model,
+            )
         except Exception as e:
-            raise RuntimeError(_get_friendly_error(e)) from e
+            logger.warning(f"AI 分析失败，尝试规则回退: {e}")
+            fallback = _analyze_fallback(issue_body, code_context)
+            if fallback:
+                return StepResult(
+                    status="completed",
+                    output={"analysis": fallback, "fallback": True},
+                    error=str(e),
+                )
+            return StepResult(status="failed", error=_get_friendly_error(e))
 
-        # 结构化输出校验
-        validated = validate_agent_output(response.content, AnalysisOutput)
-        analysis = validated if validated else (response.parsed or {"raw": response.content})
 
-        return {
-            "analysis": analysis,
-            "tokens_used": response.tokens_used,
-            "model": response.model,
+
+def _analyze_fallback(issue_body: str, code_context: str) -> dict[str, Any] | None:
+    """规则引擎回退：当 AI 不可用时，基于关键词扫描。"""
+    import re
+
+    findings = []
+    files_to_modify = []
+
+    # 扫描代码中的常见问题
+    if code_context:
+        patterns = [
+            (r"\bTODO\b", "info", "存在 TODO 注释"),
+            (r"\bFIXME\b", "warning", "存在 FIXME 注释"),
+            (r"\bHACK\b", "warning", "存在 HACK 注释"),
+            (r"\bXXX\b", "info", "存在 XXX 标记"),
+            (r"(?:password|secret|api_key|token)\s*=\s*['\"][^'\"]+['\"]", "critical", "疑似硬编码密钥"),
+            (r"\beval\s*\(", "critical", "使用了 eval()，存在注入风险"),
+            (r"console\.log\s*\(", "info", "遗留 console.log 调试语句"),
+            (r"\bprint\s*\(", "info", "遗留 print 调试语句"),
+            (r"except\s*:", "warning", "裸 except 捕获所有异常"),
+            (r"SELECT\s+\*\s+FROM", "warning", "使用 SELECT * 查询"),
+        ]
+
+        for pattern, severity, desc in patterns:
+            matches = re.findall(pattern, code_context, re.IGNORECASE)
+            if matches:
+                findings.append({
+                    "severity": severity,
+                    "description": f"{desc} (发现 {len(matches)} 处)",
+                    "suggestion": f"建议修复: {desc}",
+                })
+
+    if issue_body:
+        # 简单关键词分析
+        keywords = {
+            "bug": "修复缺陷",
+            "error": "修复错误",
+            "crash": "修复崩溃",
+            "performance": "性能优化",
+            "security": "安全加固",
+            "refactor": "代码重构",
+            "feature": "新功能实现",
         }
+        for kw, action in keywords.items():
+            if kw.lower() in issue_body.lower():
+                findings.append({
+                    "severity": "info",
+                    "description": f"需求关键词: {kw}",
+                    "suggestion": action,
+                })
+
+    if not findings:
+        return None
+
+    return {
+        "analysis": f"[规则引擎回退] 扫描到 {len(findings)} 个问题",
+        "root_cause": "基于关键词的静态分析（AI 不可用）",
+        "solution": "请参考下方 findings 手动修复",
+        "files_to_modify": files_to_modify,
+        "findings": findings,
+        "risk_assessment": "低（规则引擎回退，仅做基本检查）",
+        "estimated_effort": "small",
+        "fallback": True,
+    }
 
 
 SYSTEM_PROMPT_EXECUTE = """你是一位资深软件工程师。你将根据提供的修复方案，生成具体的代码改动。
@@ -101,7 +175,7 @@ class ExecuteHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         provider = step.config.get("provider", settings.DEFAULT_AI_PROVIDER)
         model = step.config.get("model")
         agent = get_agent(provider, model)
@@ -119,9 +193,8 @@ class ExecuteHandler(StepHandler):
         try:
             response = await agent.run(SYSTEM_PROMPT_EXECUTE, user_prompt)
         except Exception as e:
-            raise RuntimeError(_get_friendly_error(e)) from e
+            return StepResult(status="failed", error=_get_friendly_error(e))
 
-        # 结构化输出校验
         validated = validate_agent_output(response.content, ExecuteOutput)
         changes = validated if validated else (response.parsed or {"raw": response.content})
 
@@ -144,7 +217,6 @@ class ExecuteHandler(StepHandler):
                         content = change.get("content")
                         explanation = change.get("explanation", "")
                         if file_path and content:
-                            # 路径校验已在 write_file 中处理，但提前过滤明显非法路径
                             if ".." in file_path or file_path.startswith("/"):
                                 logger.warning(f"跳过不安全路径: {file_path}")
                                 continue
@@ -162,22 +234,29 @@ class ExecuteHandler(StepHandler):
                 )
             except Exception as e:
                 logger.warning(f"文件写入失败（GitHub API）: {e}")
-                return {
-                    "changes": changes,
-                    "written_files": [],
-                    "pr_body": str(changes),
-                    "tokens_used": response.tokens_used,
-                    "model": response.model,
-                    "error": f"GitHub 写入失败: {e}",
-                }
+                return StepResult(
+                    status="completed",
+                    output={
+                        "changes": changes,
+                        "written_files": [],
+                        "pr_body": str(changes),
+                        "error": f"GitHub 写入失败: {e}",
+                    },
+                    tokens_used=response.tokens_used,
+                    model=response.model,
+                    error=f"GitHub 写入失败: {e}",
+                )
 
-        return {
-            "changes": changes,
-            "written_files": written_files,
-            "pr_body": "\n".join(pr_body_lines) if pr_body_lines else str(changes),
-            "tokens_used": response.tokens_used,
-            "model": response.model,
-        }
+        return StepResult(
+            status="completed",
+            output={
+                "changes": changes,
+                "written_files": written_files,
+                "pr_body": "\n".join(pr_body_lines) if pr_body_lines else str(changes),
+            },
+            tokens_used=response.tokens_used,
+            model=response.model,
+        )
 
 
 SYSTEM_PROMPT_REVIEW = """你是一位严格的代码审查专家。审查以下代码改动（diff）。
@@ -215,7 +294,7 @@ class ReviewHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         provider = step.config.get("provider", settings.DEFAULT_AI_PROVIDER)
         model = step.config.get("model")
         agent = get_agent(provider, model)
@@ -229,17 +308,17 @@ class ReviewHandler(StepHandler):
         try:
             response = await agent.run(SYSTEM_PROMPT_REVIEW, user_prompt)
         except Exception as e:
-            raise RuntimeError(_get_friendly_error(e)) from e
+            return StepResult(status="failed", error=_get_friendly_error(e))
 
-        # 结构化输出校验
         validated = validate_agent_output(response.content, ReviewOutput)
         review = validated if validated else (response.parsed or {"raw": response.content})
 
-        return {
-            "review": review,
-            "tokens_used": response.tokens_used,
-            "model": response.model,
-        }
+        return StepResult(
+            status="completed",
+            output={"review": review},
+            tokens_used=response.tokens_used,
+            model=response.model,
+        )
 
 
 # ── merge 处理器：创建 GitHub PR ──
@@ -251,21 +330,21 @@ class MergeHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         git_repo = context.get("git_repo")
         if not git_repo:
-            return {
-                "status": "skipped",
-                "reason": "未配置 git_repo，跳过 PR 创建",
-                "pr_url": None,
-            }
+            return StepResult(
+                status="skipped",
+                output={"pr_url": None},
+                error="未配置 git_repo，跳过 PR 创建",
+            )
 
         if not settings.GITHUB_TOKEN:
-            return {
-                "status": "skipped",
-                "reason": "未配置 GITHUB_TOKEN，跳过 PR 创建",
-                "pr_url": None,
-            }
+            return StepResult(
+                status="skipped",
+                output={"pr_url": None},
+                error="未配置 GITHUB_TOKEN，跳过 PR 创建",
+            )
 
         try:
             from app.integrations.github import _parse_repo, create_pr
@@ -273,7 +352,6 @@ class MergeHandler(StepHandler):
             owner, repo_name = _parse_repo(git_repo)
             head_branch = context.get("sandbox_branch") or context.get("git_branch")
 
-            # 收集 PR 标题和正文
             analyze_result = context.get("results", {}).get("analyze", {})
             analysis = analyze_result.get("analysis", {})
             issue_title = analysis.get("analysis", "Agent 自动修复")[:80]
@@ -312,19 +390,21 @@ class MergeHandler(StepHandler):
                 body="\n".join(body_parts),
             )
 
-            return {
-                "status": "created",
-                "pr_url": result["html_url"],
-                "pr_number": result["number"],
-            }
+            return StepResult(
+                status="completed",
+                output={
+                    "pr_url": result["html_url"],
+                    "pr_number": result["number"],
+                },
+            )
 
         except Exception as e:
             logger.error(f"创建 PR 失败: {e}")
-            return {
-                "status": "failed",
-                "reason": str(e),
-                "pr_url": None,
-            }
+            return StepResult(
+                status="failed",
+                output={"pr_url": None},
+                error=str(e),
+            )
 
 
 @register_handler("condition")
@@ -333,19 +413,21 @@ class ConditionHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         condition = step.condition
         if not condition:
-            return {"evaluated": True, "condition": None, "result": True}
+            return StepResult(
+                status="completed",
+                output={"evaluated": True, "condition": None, "result": True},
+            )
 
         from app.engine.condition_eval import evaluate_condition
         result = evaluate_condition(condition, context)
 
-        return {
-            "evaluated": True,
-            "condition": condition,
-            "result": result,
-        }
+        return StepResult(
+            status="completed",
+            output={"evaluated": True, "condition": condition, "result": result},
+        )
 
 
 @register_handler("script")
@@ -354,12 +436,16 @@ class ScriptHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         import asyncio
 
         command = step.config.get("command")
         if not command:
-            return {"status": "skipped", "reason": "未配置 command", "exit_code": -1}
+            return StepResult(
+                status="skipped",
+                output={"exit_code": -1},
+                error="未配置 command",
+            )
 
         # 替换模板变量
         for key, value in context.items():
@@ -382,17 +468,28 @@ class ScriptHandler(StepHandler):
             output = stdout.decode("utf-8", errors="replace")
             error = stderr.decode("utf-8", errors="replace")
 
-            return {
-                "status": "success" if proc.returncode == 0 else "failed",
-                "exit_code": proc.returncode,
-                "output": output[:10000],
-                "error": error[:5000] if error else None,
-            }
+            return StepResult(
+                status="completed" if proc.returncode == 0 else "failed",
+                output={
+                    "exit_code": proc.returncode,
+                    "output": output[:10000],
+                    "error": error[:5000] if error else None,
+                },
+                error=error[:5000] if proc.returncode != 0 and error else None,
+            )
         except asyncio.TimeoutError:
             proc.kill()
-            return {"status": "timeout", "exit_code": -1, "error": f"命令超时 ({timeout}s)"}
+            return StepResult(
+                status="failed",
+                output={"exit_code": -1},
+                error=f"命令超时 ({timeout}s)",
+            )
         except Exception as e:
-            return {"status": "error", "exit_code": -1, "error": str(e)}
+            return StepResult(
+                status="failed",
+                output={"exit_code": -1},
+                error=str(e),
+            )
 
 
 @register_handler("subtask")
@@ -401,12 +498,12 @@ class SubtaskHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         logger.warning(f"subtask 步骤尚未实现: {step.name}")
-        return {
-            "status": "stub",
-            "message": f"subtask 步骤 '{step.name}' 尚未实现，自动跳过",
-        }
+        return StepResult(
+            status="completed",
+            output={"message": f"subtask 步骤 '{step.name}' 尚未实现，自动跳过"},
+        )
 
 
 @register_handler("loop")
@@ -415,9 +512,54 @@ class LoopHandler(StepHandler):
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> StepResult:
         logger.warning(f"loop 步骤尚未实现: {step.name}")
-        return {
-            "status": "stub",
-            "message": f"loop 步骤 '{step.name}' 尚未实现，自动跳过",
-        }
+        return StepResult(
+            status="completed",
+            output={"message": f"loop 步骤 '{step.name}' 尚未实现，自动跳过"},
+        )
+
+
+# ── AI 不可用时的规则引擎回退 ──
+
+def _analyze_fallback(issue_body: str, code_context: str) -> dict | None:
+    """当 AI 不可用时，使用简单规则对 issue 做基础分析。"""
+    import re
+
+    if not issue_body or not issue_body.strip():
+        return None
+
+    # 提取提到的文件
+    files = re.findall(r'[\w/.-]+\.(py|js|ts|go|rs|java|rb|php|css|html)', issue_body)
+    files_to_modify = [{"path": f, "change": "根据 issue 描述可能需要修改此文件"} for f in files[:5]]
+
+    # 简单分类
+    severity_keywords = {
+        "崩溃": "critical", "crash": "critical", "安全": "critical", "security": "critical",
+        "报错": "high", "error": "high", "异常": "high", "exception": "high",
+        "警告": "medium", "warning": "medium", "优化": "low", "optimization": "low",
+    }
+    risk = "medium"
+    for kw, level in severity_keywords.items():
+        if kw.lower() in issue_body.lower():
+            risk = level
+            break
+
+    # 尝试判断根因
+    root_cause = "需人工分析"
+    if "null" in issue_body.lower() or "none" in issue_body.lower():
+        root_cause = "可能存在空值引用 (null/None)"
+    elif "timeout" in issue_body.lower() or "超时" in issue_body:
+        root_cause = "可能存在超时问题（网络或处理耗时过长）"
+    elif "permission" in issue_body.lower() or "权限" in issue_body:
+        root_cause = "可能与权限配置有关"
+
+    return {
+        "analysis": issue_body.strip()[:200],
+        "root_cause": root_cause,
+        "solution": "请人工审核并制定修复方案（AI 当前不可用）",
+        "files_to_modify": files_to_modify,
+        "risk_assessment": risk,
+        "estimated_effort": "unknown",
+        "_fallback": True,
+    }

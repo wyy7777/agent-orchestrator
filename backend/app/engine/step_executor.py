@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.engine.condition_eval import evaluate_condition
 from app.engine.plugin import get_plugin
-from app.engine.types import StepHandler, StepStatus, TaskStatus, _step_handlers
+from app.engine.types import StepHandler, StepResult, StepStatus, TaskStatus, _step_handlers
 from app.engine.yaml_parser import StepDefinition, WorkflowDefinition, parse_workflow_yaml
 from app.models.approval import Approval
 from app.models.step_execution import StepExecution
@@ -91,35 +91,66 @@ async def execute_single_step(
             )
 
     # 带重试执行
-    output = await _execute_with_retry(
+    result = await _execute_with_retry(
         _do_execute, step_def, step_exec, label=step_exec.step_name
     )
 
+    # 统一处理 StepResult 和 dict
+    if isinstance(result, StepResult):
+        status = result.status
+        output = result.output
+        tokens = result.tokens_used
+        model_name = result.model
+        error = result.error
+    else:
+        status = result.get("status", "completed") if isinstance(result, dict) else "completed"
+        output = result if isinstance(result, dict) else {"raw": result}
+        tokens = output.get("tokens_used", 0)
+        model_name = output.get("model", "")
+        error = output.get("error")
+
     # 检查是否为跳过/fallback
-    if isinstance(output, dict) and output.get("status") in ("skipped", "fallback"):
+    if status in ("skipped", "fallback"):
         step_exec.status = StepStatus.SKIPPED.value
         step_exec.output_data = output
         step_exec.completed_at = datetime.now(timezone.utc)
         context["results"][step_exec.step_name] = output
         return output
 
+    if status == "failed":
+        step_exec.status = StepStatus.FAILED.value
+        step_exec.output_data = output
+        step_exec.error_message = error
+        step_exec.completed_at = datetime.now(timezone.utc)
+        raise RuntimeError(error or "步骤执行失败")
+
     step_exec.status = StepStatus.COMPLETED.value
     step_exec.output_data = output
     step_exec.completed_at = datetime.now(timezone.utc)
 
-    tokens = output.get("tokens_used", 0)
     task.total_tokens_used += tokens
     step_exec.token_usage = {"tokens": tokens}
+    if model_name:
+        step_exec.ai_model = model_name
 
     context["results"][step_exec.step_name] = output
 
     # 存储上下文快照（用于重放）
+    # 截断过大的输出避免存储膨胀
+    results_snapshot = {}
+    for k, v in context.get("results", {}).items():
+        if isinstance(v, dict) and v.get("output") and isinstance(v["output"], str) and len(v["output"]) > 50000:
+            results_snapshot[k] = {**v, "output": v["output"][:50000] + "…[TRUNCATED]"}
+        else:
+            results_snapshot[k] = v
+
     step_exec.context_snapshot = {
         "task_id": context.get("task_id"),
         "git_repo": context.get("git_repo"),
         "git_branch": context.get("git_branch"),
         "sandbox_branch": context.get("sandbox_branch"),
-        "results_keys": list(context.get("results", {}).keys()),
+        "trigger_payload": context.get("trigger_payload"),
+        "results": results_snapshot,
     }
 
     if step_def.type == "merge" and output.get("pr_url"):

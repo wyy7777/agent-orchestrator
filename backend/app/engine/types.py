@@ -1,12 +1,23 @@
 """引擎类型定义：枚举、基类、注册表。"""
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.yaml_parser import StepDefinition
+
+
+@dataclass
+class StepResult:
+    """统一的步骤执行结果。"""
+    status: str  # "completed" | "failed" | "skipped" | "fallback"
+    output: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    tokens_used: int = 0
+    model: str = ""
 
 
 class TaskStatus(str, Enum):
@@ -36,7 +47,7 @@ class StepHandler:
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> dict[str, Any]:
+    ) -> "StepResult":
         raise NotImplementedError
 
 
