@@ -164,6 +164,28 @@ const translations: Record<Locale, Record<string, string>> = {
     "notification.pending": "待审批",
     "notification.browser": "浏览器通知",
     "notification.request_permission": "开启通知",
+
+    // 审计报告
+    "audit.title": "审计报告",
+    "audit.desc": "生成合规审计报告（EU AI Act），含 SHA-256 防篡改签名。",
+    "audit.generate": "生成并下载",
+    "audit.history": "历史报告",
+    "audit.date_range": "日期范围",
+    "audit.format": "格式",
+    "audit.format_csv": "任务摘要 (CSV)",
+    "audit.format_detailed": "步骤详情 (Detailed CSV)",
+    "audit.sha256": "SHA-256 签名",
+    "audit.size": "大小",
+    "audit.no_reports": "暂无报告，选择日期范围并点击"生成并下载"",
+
+    // 沙箱
+    "sandbox.title": "沙箱",
+    "sandbox.create": "创建沙箱",
+    "sandbox.destroy": "销毁",
+    "sandbox.execute": "执行命令",
+    "sandbox.mode": "模式",
+    "sandbox.local": "本地",
+    "sandbox.docker": "Docker",
   },
   en: {
     // Common
@@ -308,6 +330,28 @@ const translations: Record<Locale, Record<string, string>> = {
     "notification.pending": "Pending",
     "notification.browser": "Browser Notification",
     "notification.request_permission": "Enable Notifications",
+
+    // Audit Reports
+    "audit.title": "Audit Reports",
+    "audit.desc": "Generate compliance audit reports (EU AI Act) with SHA-256 tamper-proof signatures.",
+    "audit.generate": "Generate & Download",
+    "audit.history": "Report History",
+    "audit.date_range": "Date Range",
+    "audit.format": "Format",
+    "audit.format_csv": "Task Summary (CSV)",
+    "audit.format_detailed": "Step Details (Detailed CSV)",
+    "audit.sha256": "SHA-256 Signature",
+    "audit.size": "Size",
+    "audit.no_reports": "No reports yet. Select a date range and click "Generate & Download"",
+
+    // Sandbox
+    "sandbox.title": "Sandboxes",
+    "sandbox.create": "Create Sandbox",
+    "sandbox.destroy": "Destroy",
+    "sandbox.execute": "Run Command",
+    "sandbox.mode": "Mode",
+    "sandbox.local": "Local",
+    "sandbox.docker": "Docker",
   },
 };
 
