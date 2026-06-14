@@ -1,6 +1,8 @@
 """审计日志 API。"""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,8 @@ from app.database import get_db
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.auth import require_admin, require_role
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/audit", tags=["审计日志"])
 
