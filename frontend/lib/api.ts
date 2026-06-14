@@ -121,6 +121,7 @@ export interface StepExecution {
   output_data: Record<string, unknown> | null;
   ai_model: string | null;
   token_usage: Record<string, number> | null;
+  quality_score: Record<string, unknown> | null;
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -240,7 +241,18 @@ export interface DashboardStatsData {
 
 export const dashboardApi = {
   stats: (signal?: AbortSignal) => request<DashboardStatsData>("/api/dashboard/stats", { signal }),
+  qualityTrends: (days = 30, signal?: AbortSignal) =>
+    request<{ trends: QualityTrendItem[] }>(`/api/dashboard/quality-trends?days=${days}`, { signal }),
 };
+
+export interface QualityTrendItem {
+  date: string;
+  count: number;
+  avg_correctness: number;
+  avg_completeness: number;
+  avg_security: number;
+  avg_style: number;
+}
 
 // === Notification ===
 export interface NotificationConfig {
@@ -283,4 +295,43 @@ export const notificationApi = {
     }),
   history: (limit = 50) =>
     request<NotificationHistoryResponse>(`/api/notifications/history?limit=${limit}`),
+};
+
+// === Audit Reports ===
+export interface AuditReportItem {
+  id: string;
+  start_date: string | null;
+  end_date: string | null;
+  format: string;
+  sha256: string;
+  size_bytes: number;
+  created_at: string | null;
+}
+
+export interface AuditReportListResponse {
+  items: AuditReportItem[];
+}
+
+export const auditApi = {
+  listReports: (signal?: AbortSignal) =>
+    request<AuditReportListResponse>("/api/audit/reports", { signal }),
+  generateReport: async (startDate: string, endDate: string, format: string = "csv") => {
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
+    const res = await fetch(
+      `${API_BASE}/api/audit/report?start_date=${startDate}&end_date=${endDate}&format=${format}`
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || "生成报告失败");
+    }
+    const sha256 = res.headers.get("X-Report-SHA256") || "";
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `audit_report_${startDate}_${endDate}.${format}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return { sha256, sizeBytes: blob.size };
+  },
 };
