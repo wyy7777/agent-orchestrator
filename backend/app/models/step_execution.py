@@ -29,6 +29,7 @@ class StepExecution(Base):
     ai_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     token_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     quality_score: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    context_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

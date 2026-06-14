@@ -217,7 +217,8 @@ async def replay_step(
         "step_type": step_exec.step_type,
         "original_output": step_exec.output_data,
         "original_status": step_exec.status,
+        "context_snapshot": step_exec.context_snapshot,
         "workflow_snapshot_used": task.workflow_snapshot is not None,
         "step_config": step_def.config,
-        "message": "重放功能已就绪（当前返回原步骤输出）",
+        "message": "重放功能已就绪（当前返回原步骤输出 + 上下文快照）",
     }

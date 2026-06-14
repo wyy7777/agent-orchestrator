@@ -113,6 +113,15 @@ async def execute_single_step(
 
     context["results"][step_exec.step_name] = output
 
+    # 存储上下文快照（用于重放）
+    step_exec.context_snapshot = {
+        "task_id": context.get("task_id"),
+        "git_repo": context.get("git_repo"),
+        "git_branch": context.get("git_branch"),
+        "sandbox_branch": context.get("sandbox_branch"),
+        "results_keys": list(context.get("results", {}).keys()),
+    }
+
     if step_def.type == "merge" and output.get("pr_url"):
         task.pr_url = output["pr_url"]
         logger.info(f"PR 已创建: {task.pr_url}")
