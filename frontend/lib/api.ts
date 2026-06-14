@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 const REQUEST_TIMEOUT = 30000; // 30 秒
 
@@ -46,6 +46,11 @@ async function request<T>(
     }
     if (res.status === 204) return undefined as T;
     return res.json();
+  } catch (err) {
+    if (err instanceof TypeError && err.message === "Failed to fetch") {
+      throw new Error("无法连接到后端服务，请确认后端已启动 (http://127.0.0.1:8000)");
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -316,7 +321,7 @@ export const auditApi = {
   listReports: (signal?: AbortSignal) =>
     request<AuditReportListResponse>("/api/audit/reports", { signal }),
   generateReport: async (startDate: string, endDate: string, format: string = "csv") => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     const res = await fetch(
       `${API_BASE}/api/audit/report?start_date=${startDate}&end_date=${endDate}&format=${format}`
     );
