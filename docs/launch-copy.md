@@ -31,6 +31,9 @@ I built Agent Orchestrator, an open-source platform that orchestrates AI agent w
 - Real-time WebSocket status updates
 - Desktop app (Tauri) + Web UI
 - 5 built-in templates: Bug Fix, PR Review, Security Scan, Code Refactor, Doc Generator
+- 📋 Audit reports (CSV export, SHA-256 signed) for EU AI Act compliance
+- 🔐 RBAC (admin/manager/operator/viewer roles)
+- 🌐 Internationalization (中文 / English)
 
 **Tech stack:** Python FastAPI + Next.js + SQLite + Tauri v2
 
@@ -62,6 +65,9 @@ AI agents can write code, but deploying AI-generated code without human review i
 📊 Real-time execution tracking
 🖥️ Desktop app + Web UI
 📋 5 built-in workflow templates
+📋 Audit reports with SHA-256 (EU AI Act compliant)
+🔐 RBAC roles (admin / manager / operator / viewer)
+🌐 i18n (中文 / English)
 
 **Open source. MIT licensed. Self-hosted.**
 
@@ -152,6 +158,9 @@ Key features:
 - Real-time WebSocket updates
 - Desktop app + Web UI
 - 5 built-in templates
+- Audit reports (SHA-256 signed, EU AI Act)
+- RBAC (admin/manager/operator/viewer)
+- i18n (中文/English)
 
 **Tweet 5:**
 Open source, MIT licensed.
@@ -183,6 +192,9 @@ Would love your feedback on the "human-in-the-loop" workflow model for AI agents
 - 实时 WebSocket 状态推送
 - 桌面端（Tauri）+ Web 界面
 - 5 个内置模板
+- 📋 合规审计报告（CSV 导出，SHA-256 签名）— 满足 EU AI Act
+- 🔐 RBAC 角色权限（admin/manager/operator/viewer）
+- 🌐 国际化（中文 / English）
 
 技术栈：Python FastAPI + Next.js + SQLite + Tauri v2
 协议：MIT
