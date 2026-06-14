@@ -3,6 +3,7 @@ import { ConfigProvider, App as AntApp, theme as antTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import enUS from "antd/locale/en_US";
 import AppLayout from "@/components/Layout";
+import OnboardingWizard from "@/components/OnboardingWizard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useState, useEffect, useCallback } from "react";
 import { I18nContext, t, type Locale } from "@/lib/i18n";
@@ -11,6 +12,7 @@ import "../styles/globals.css";
 export default function App({ Component, pageProps }: AppProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [locale, setLocale] = useState<Locale>("zh");
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     const savedDark = localStorage.getItem("darkMode");
@@ -20,6 +22,10 @@ export default function App({ Component, pageProps }: AppProps) {
 
     const savedLocale = localStorage.getItem("locale") as Locale;
     if (savedLocale === "en" || savedLocale === "zh") setLocale(savedLocale);
+
+    // 检查是否需要显示引导
+    const onboardingDone = localStorage.getItem("onboarding_completed");
+    if (!onboardingDone) setShowOnboarding(true);
   }, []);
 
   const toggleDark = () => {
@@ -55,6 +61,11 @@ export default function App({ Component, pageProps }: AppProps) {
             <AppLayout darkMode={darkMode} toggleDark={toggleDark}>
               <Component {...pageProps} />
             </AppLayout>
+            <OnboardingWizard
+              open={showOnboarding}
+              onClose={() => setShowOnboarding(false)}
+              onNavigate={(path) => window.location.href = path}
+            />
           </AntApp>
         </ConfigProvider>
       </I18nContext.Provider>
