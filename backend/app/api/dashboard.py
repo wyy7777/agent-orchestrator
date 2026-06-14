@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.approval import Approval
 from app.models.task import Task
+from app.models.user import User
 from app.models.workflow import Workflow
+from app.auth import require_role
 from app.schemas.dashboard import (
     DashboardStats,
     DailyTrend,
@@ -23,7 +25,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
 @router.get("/stats", response_model=DashboardStats)
-async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
+async def get_dashboard_stats(db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator", "viewer"))):
     total = (await db.execute(select(func.count(Task.id)))).scalar() or 0
     completed = (
         await db.execute(select(func.count(Task.id)).where(Task.status == "completed"))
@@ -140,6 +142,7 @@ async def get_dashboard_trends(
 async def get_top_workflows(
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "manager", "operator", "viewer")),
 ):
     """热门工作流，按执行次数排序"""
     rows = (
@@ -177,6 +180,7 @@ async def get_top_workflows(
 async def get_dashboard_errors(
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "manager", "operator", "viewer")),
 ):
     """最近错误汇总，按错误类型分组"""
     # 从 task 和 step_execution 两个表收集错误
@@ -214,6 +218,7 @@ async def export_dashboard_data(
     type: str = Query("tasks", pattern="^(tasks|executions)$"),
     days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "manager", "operator")),
 ):
     """导出数据为 CSV（支持 tasks / executions）"""
     now = datetime.now(timezone.utc)
@@ -315,6 +320,7 @@ async def export_dashboard_data(
 async def quality_trends(
     days: int = Query(30, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "manager", "operator", "viewer")),
 ):
     """返回近 N 天的质量评分趋势（按日聚合）。"""
     from app.models.step_execution import StepExecution
