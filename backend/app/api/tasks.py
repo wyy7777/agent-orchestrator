@@ -7,7 +7,9 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.task import Task
+from app.models.user import User
 from app.models.workflow import Workflow
+from app.auth import require_role
 from app.schemas.task import TaskCreate, TaskListResponse, TaskResponse
 from app.engine.state_machine import ExecutionEngine
 from app.services.ws_manager import ws_manager
@@ -106,10 +108,11 @@ async def list_tasks(
 
 
 @router.post("", response_model=TaskResponse, status_code=201)
-async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
+async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator"))):
     # 验证 workflow 存在
     wf_result = await db.execute(select(Workflow).where(Workflow.id == body.workflow_id))
-    if not wf_result.scalar_one_or_none():
+    workflow = wf_result.scalar_one_or_none()
+    if not workflow:
         raise HTTPException(status_code=404, detail="工作流不存在")
 
     task = Task(
@@ -118,7 +121,7 @@ async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
         trigger_payload=body.trigger_payload,
         git_repo=body.git_repo,
         git_branch=body.git_branch,
-        workflow_snapshot=wf_result.scalar_one_or_none().yaml_definition,
+        workflow_snapshot=workflow.yaml_definition,
     )
     db.add(task)
     await db.flush()
@@ -140,7 +143,7 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{task_id}/start", response_model=TaskResponse)
-async def start_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def start_task(task_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator"))):
     engine = _get_engine(db)
     try:
         task = await engine.start_task(task_id)
@@ -156,6 +159,7 @@ async def rollback_task(
     task_id: str,
     target_step_index: int | None = None,
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "manager")),
 ):
     engine = _get_engine(db)
     try:
@@ -168,7 +172,7 @@ async def rollback_task(
 
 
 @router.post("/{task_id}/resume", response_model=TaskResponse)
-async def resume_task(task_id: str, db: AsyncSession = Depends(get_db)):
+async def resume_task(task_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator"))):
     engine = _get_engine(db)
     try:
         task = await engine.resume_task(task_id)
@@ -184,8 +188,9 @@ async def replay_step(
     task_id: str,
     step_index: int,
     db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "manager", "operator")),
 ):
-    """重放指定步骤：使用快照上下文重新执行。"""
+    """重放指定步骤：使用快照上下文真正重新执行。"""
     result = await db.execute(
         select(Task)
         .options(selectinload(Task.step_executions), selectinload(Task.workflow))
@@ -210,15 +215,50 @@ async def replay_step(
 
     step_def = workflow_def.steps[step_index]
 
-    return {
+    # 从快照恢复执行上下文
+    snapshot = step_exec.context_snapshot or {}
+    context = {
         "task_id": task_id,
-        "step_index": step_index,
-        "step_name": step_exec.step_name,
-        "step_type": step_exec.step_type,
-        "original_output": step_exec.output_data,
-        "original_status": step_exec.status,
-        "context_snapshot": step_exec.context_snapshot,
-        "workflow_snapshot_used": task.workflow_snapshot is not None,
-        "step_config": step_def.config,
-        "message": "重放功能已就绪（当前返回原步骤输出 + 上下文快照）",
+        "trigger_payload": snapshot.get("trigger_payload") or task.trigger_payload or {},
+        "git_repo": snapshot.get("git_repo") or task.git_repo,
+        "git_branch": snapshot.get("git_branch") or task.git_branch,
+        "sandbox_branch": snapshot.get("sandbox_branch") or task.sandbox_branch,
+        "results": snapshot.get("results") or {},
     }
+
+    # 创建新的 StepExecution 记录用于重放结果
+    from app.models.step_execution import StepExecution as StepExecModel
+    from app.engine.step_executor import execute_single_step
+
+    replay_exec = StepExecModel(
+        task_id=task_id,
+        step_index=step_index,
+        step_name=f"{step_exec.step_name} [replay]",
+        step_type=step_exec.step_type,
+        status="running",
+    )
+    db.add(replay_exec)
+    await db.flush()
+
+    try:
+        output = await execute_single_step(
+            replay_exec, step_def, task, context, db,
+        )
+        await db.commit()
+
+        return {
+            "task_id": task_id,
+            "step_index": step_index,
+            "step_name": step_exec.step_name,
+            "replay_execution_id": replay_exec.id,
+            "original_output": step_exec.output_data,
+            "original_status": step_exec.status,
+            "replay_output": output,
+            "replay_status": replay_exec.status,
+            "message": "重放执行完成",
+        }
+    except Exception as e:
+        replay_exec.status = "failed"
+        replay_exec.error_message = str(e)
+        await db.commit()
+        raise HTTPException(status_code=500, detail=f"重放执行失败: {e}")

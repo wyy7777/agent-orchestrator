@@ -1,5 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
 from app.services.scheduler import scheduler
 from app.schemas.schedule import ScheduleCreate, ScheduleResponse, ScheduleListResponse
 
@@ -7,13 +9,14 @@ router = APIRouter(prefix="/api/schedules", tags=["schedules"])
 
 
 @router.post("", response_model=ScheduleResponse, status_code=201)
-async def create_schedule(body: ScheduleCreate):
+async def create_schedule(body: ScheduleCreate, db: AsyncSession = Depends(get_db)):
     """创建一条调度配置。"""
     try:
-        schedule = scheduler.add_schedule(
+        schedule = await scheduler.add_schedule(
             workflow_id=body.workflow_id,
             cron_expr=body.cron_expr,
             payload=body.payload,
+            db=db,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -51,12 +54,12 @@ async def list_schedules():
 
 
 @router.patch("/{schedule_id}", response_model=ScheduleResponse)
-async def toggle_schedule(schedule_id: str, body: dict):
+async def toggle_schedule(schedule_id: str, body: dict, db: AsyncSession = Depends(get_db)):
     """启用/禁用一条调度配置。"""
     enabled = body.get("enabled")
     if enabled is None:
         raise HTTPException(status_code=400, detail="缺少 enabled 字段")
-    schedule = scheduler.toggle_schedule(schedule_id, enabled)
+    schedule = await scheduler.toggle_schedule(schedule_id, enabled, db=db)
     if not schedule:
         raise HTTPException(status_code=404, detail="调度不存在")
     return ScheduleResponse(
@@ -71,7 +74,7 @@ async def toggle_schedule(schedule_id: str, body: dict):
 
 
 @router.delete("/{schedule_id}", status_code=204)
-async def delete_schedule(schedule_id: str):
+async def delete_schedule(schedule_id: str, db: AsyncSession = Depends(get_db)):
     """删除一条调度配置。"""
-    if not scheduler.remove_schedule(schedule_id):
+    if not await scheduler.remove_schedule(schedule_id, db=db):
         raise HTTPException(status_code=404, detail="调度不存在")

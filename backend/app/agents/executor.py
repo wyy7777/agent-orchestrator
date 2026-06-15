@@ -12,8 +12,29 @@ from app.config import settings
 from app.engine.state_machine import StepHandler, register_handler
 from app.engine.types import StepResult
 from app.engine.yaml_parser import StepDefinition
+from app.models.agent_config import AgentConfig
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_agent_from_config(step: StepDefinition, db: AsyncSession) -> tuple[str, str | None]:
+    """从步骤配置中获取 Agent 的 provider 和 model。
+
+    优先使用 config.agent（已注册的 Agent 名称），否则使用 config.provider。
+    """
+    agent_name = step.config.get("agent")
+    if agent_name and db:
+        from sqlalchemy import select
+        result = await db.execute(select(AgentConfig).where(
+            AgentConfig.name == agent_name,
+            AgentConfig.enabled == True,  # noqa: E712
+        ))
+        agent_config = result.scalar_one_or_none()
+        if agent_config:
+            return agent_config.provider, agent_config.model
+
+    # 回退到 config.provider
+    return step.config.get("provider", settings.DEFAULT_AI_PROVIDER), step.config.get("model")
 
 
 SYSTEM_PROMPT_ANALYZE = """你是一位资深软件工程师。你的任务是分析一个 Issue 或需求，并输出一个结构化的修复方案。
@@ -40,8 +61,7 @@ class AnalyzeHandler(StepHandler):
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
-        provider = step.config.get("provider", settings.DEFAULT_AI_PROVIDER)
-        model = step.config.get("model")
+        provider, model = await _get_agent_from_config(step, db)
         agent = get_agent(provider, model)
 
         trigger = context.get("trigger_payload", {})
@@ -176,11 +196,18 @@ class ExecuteHandler(StepHandler):
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
-        provider = step.config.get("provider", settings.DEFAULT_AI_PROVIDER)
-        model = step.config.get("model")
+        provider, model = await _get_agent_from_config(step, db)
         agent = get_agent(provider, model)
 
+        # 从 context 中查找分析结果：优先按步骤名 "analyze" 查找，
+        # 否则在所有结果中查找含 "analysis" 键的步骤输出（兼容自定义步骤名）
         analysis = context.get("results", {}).get("analyze", {}).get("analysis", {})
+        if not analysis:
+            for step_name, result in context.get("results", {}).items():
+                if isinstance(result, dict) and "analysis" in result:
+                    analysis = result.get("analysis", {})
+                    break
+
         code_context = context.get("trigger_payload", {}).get("code_context", "")
 
         prompt_template = step.prompt_template or (
@@ -295,11 +322,17 @@ class ReviewHandler(StepHandler):
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
-        provider = step.config.get("provider", settings.DEFAULT_AI_PROVIDER)
-        model = step.config.get("model")
+        provider, model = await _get_agent_from_config(step, db)
         agent = get_agent(provider, model)
 
+        # 从 context 中查找执行结果：优先按步骤名 "execute" 查找，
+        # 否则在所有结果中查找含 "changes" 键的步骤输出
         execute_result = context.get("results", {}).get("execute", {})
+        if not execute_result:
+            for step_name, result in context.get("results", {}).items():
+                if isinstance(result, dict) and "changes" in result:
+                    execute_result = result
+                    break
         changes = execute_result.get("changes", {})
 
         prompt_template = step.prompt_template or "## 代码改动\n{changes}"
@@ -354,12 +387,27 @@ class MergeHandler(StepHandler):
 
             analyze_result = context.get("results", {}).get("analyze", {})
             analysis = analyze_result.get("analysis", {})
+            if not analysis:
+                for _sn, result in context.get("results", {}).items():
+                    if isinstance(result, dict) and "analysis" in result:
+                        analysis = result.get("analysis", {})
+                        break
             issue_title = analysis.get("analysis", "Agent 自动修复")[:80]
 
             review_result = context.get("results", {}).get("review", {})
+            if not review_result:
+                for _sn, result in context.get("results", {}).items():
+                    if isinstance(result, dict) and "review" in result:
+                        review_result = result
+                        break
             review = review_result.get("review", {})
 
             execute_result = context.get("results", {}).get("execute", {})
+            if not execute_result:
+                for _sn, result in context.get("results", {}).items():
+                    if isinstance(result, dict) and ("changes" in result or "written_files" in result):
+                        execute_result = result
+                        break
             pr_body = execute_result.get("pr_body", "")
             written_files = execute_result.get("written_files", [])
 
@@ -432,12 +480,47 @@ class ConditionHandler(StepHandler):
 
 @register_handler("script")
 class ScriptHandler(StepHandler):
-    """脚本步骤：执行 shell 命令。"""
+    """脚本步骤：执行 shell 命令（带注入防护）。"""
+
+    # 危险命令模式黑名单（正则）
+    import re as _re
+    _BLOCKED_PATTERNS = [
+        _re.compile(r"\brm\s+-rf\s+/\b"),          # rm -rf /
+        _re.compile(r"\bmkfs\b"),                    # mkfs (格式化)
+        _re.compile(r"\bdd\s+if="),                  # dd if= (磁盘覆写)
+        _re.compile(r":\(\)\{"),                     # fork bomb
+        _re.compile(r"curl\s.*\|\s*(ba)?sh"),        # curl pipe to shell
+        _re.compile(r"wget\s.*\|\s*(ba)?sh"),        # wget pipe to shell
+        _re.compile(r"curl\s.*\|\s*python"),         # curl pipe to python
+        _re.compile(r">\s*/dev/sd"),                 # write to disk device
+        _re.compile(r"\bchmod\s+777\s+/\b"),         # chmod 777 /
+        _re.compile(r"\b(nc|netcat)\s.*-e\s"),       # netcat reverse shell
+        _re.compile(r"python[23]?\s*-c.*import\s+(os|subprocess|socket)"),  # python reverse shell
+    ]
+
+    # 最大超时限制
+    MAX_TIMEOUT = 300  # 5 分钟
+
+    @classmethod
+    def _check_command_safety(cls, command: str) -> str | None:
+        """检查命令安全性。返回 None 表示安全，否则返回危险原因。"""
+        lower_cmd = command.lower()
+        for pattern in cls._BLOCKED_PATTERNS:
+            if pattern.search(lower_cmd):
+                return f"命令包含危险模式: {pattern.pattern}"
+        return None
+
+    @staticmethod
+    def _shell_escape(value: str) -> str:
+        """对模板变量值进行 shell 转义，防止注入。"""
+        import shlex
+        return shlex.quote(value)
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
         import asyncio
+        import os
 
         command = step.config.get("command")
         if not command:
@@ -447,13 +530,49 @@ class ScriptHandler(StepHandler):
                 error="未配置 command",
             )
 
-        # 替换模板变量
-        for key, value in context.items():
-            if isinstance(value, str):
-                command = command.replace(f"{{{key}}}", value)
+        # 安全检查
+        safety_issue = self._check_command_safety(command)
+        if safety_issue:
+            logger.warning(f"ScriptHandler 拒绝执行: {safety_issue}")
+            return StepResult(
+                status="failed",
+                output={"exit_code": -1},
+                error=f"命令被安全策略拒绝: {safety_issue}",
+            )
 
-        timeout = step.timeout or 60
+        # 替换模板变量（使用 shell 转义防止注入）
+        def _collect_strings(obj: Any, prefix: str = "") -> dict[str, str]:
+            """递归收集 context 中所有字符串值。"""
+            result = {}
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    full_key = f"{prefix}.{k}" if prefix else k
+                    if isinstance(v, str):
+                        result[full_key] = v
+                    elif isinstance(v, dict):
+                        result.update(_collect_strings(v, full_key))
+                    elif isinstance(v, list):
+                        for i, item in enumerate(v):
+                            result.update(_collect_strings(item, f"{full_key}[{i}]"))
+            return result
+
+        all_vars = _collect_strings(context)
+        for key, value in all_vars.items():
+            safe_value = self._shell_escape(value)
+            command = command.replace(f"{{{key}}}", safe_value)
+
+        # 限制超时
+        timeout = min(step.timeout or 60, self.MAX_TIMEOUT)
         cwd = step.config.get("cwd")
+
+        # 受限环境变量：清理危险变量，设置安全 HOME
+        import tempfile
+        safe_env = {
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "LANG": "en_US.UTF-8",
+            "HOME": tempfile.gettempdir(),
+            "TMPDIR": tempfile.gettempdir(),
+        }
 
         try:
             proc = await asyncio.create_subprocess_shell(
@@ -461,6 +580,7 @@ class ScriptHandler(StepHandler):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
+                env=safe_env,
             )
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout

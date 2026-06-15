@@ -2,10 +2,9 @@ import React, { useState } from "react";
 import { Card, Form, Input, Button, Typography, message, Tabs, Space, Checkbox, Divider } from "antd";
 import { UserOutlined, LockOutlined, MailOutlined, RocketOutlined, GithubOutlined } from "@ant-design/icons";
 import { useRouter } from "next/router";
+import { authApi } from "@/lib/api";
 
 const { Title, Text, Paragraph } = Typography;
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -15,20 +14,7 @@ export default function LoginPage() {
   const handleLogin = async (values: { username: string; password: string; remember_me?: boolean }) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "登录失败");
-      }
-      const data = await res.json();
-      localStorage.setItem("token", data.access_token);
-      if (data.refresh_token) {
-        localStorage.setItem("refresh_token", data.refresh_token);
-      }
+      await authApi.login(values.username, values.password);
       message.success("登录成功");
       router.push("/");
     } catch (err) {
@@ -41,15 +27,7 @@ export default function LoginPage() {
   const handleRegister = async (values: { username: string; email: string; password: string }) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "注册失败");
-      }
+      await authApi.register(values);
       message.success("注册成功，请登录");
       setActiveTab("login");
     } catch (err) {
@@ -63,16 +41,13 @@ export default function LoginPage() {
   const handleSkipLogin = async () => {
     setLoading(true);
     try {
-      // 直接访问需要认证的接口，后端会自动创建默认用户
-      const res = await fetch(`${API_BASE}/api/auth/me`);
-      if (res.ok) {
+      const user = await authApi.me();
+      if (user) {
         message.success("已进入本地模式");
         router.push("/");
-      } else {
-        throw new Error("初始化失败");
       }
     } catch (err) {
-      message.error((err as Error).message);
+      message.error("初始化失败，请先注册账号");
     } finally {
       setLoading(false);
     }

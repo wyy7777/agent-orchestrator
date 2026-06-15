@@ -8,7 +8,7 @@ from app.database import Base, get_db
 from app.main import app
 
 # 确保所有模型被导入（用于表创建）
-from app.models import User, Workflow, Task, StepExecution, Approval, Webhook  # noqa: F401
+from app.models import User, Workflow, Task, StepExecution, Approval, ApprovalPolicy, AuditLog, AuditReport, AgentConfig, Webhook  # noqa: F401
 
 TEST_DB_URL = "sqlite+aiosqlite:///./test.db"
 test_engine = create_async_engine(TEST_DB_URL, echo=False)
@@ -24,12 +24,23 @@ def event_loop():
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
+    # 重置速率限制器，避免跨测试的 429 错误
+    from app.main import _rate_store
+    _rate_store.clear()
+
+    # 覆盖全局 async_session，使 _execute_workflow 等后台任务也使用测试数据库
+    import app.database
+    original_session = app.database.async_session
+    app.database.async_session = test_session
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+
+    app.database.async_session = original_session
 
 
 @pytest_asyncio.fixture

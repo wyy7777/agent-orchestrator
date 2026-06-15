@@ -21,7 +21,7 @@ const Column = dynamic(() => import("@ant-design/charts").then((m) => m.Column),
 
 import DashboardStats from "@/components/DashboardStats";
 import { dashboardApi, taskApi, workflowApi } from "@/lib/api";
-import type { DashboardStatsData, TaskItem, WorkflowItem } from "@/lib/api";
+import type { DashboardStatsData, TaskItem, WorkflowItem, QualityTrendItem } from "@/lib/api";
 import { statusColors } from "@/lib/constants";
 import { useI18n } from "@/lib/i18n";
 
@@ -77,6 +77,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [qualityTrends, setQualityTrends] = useState<QualityTrendItem[]>([]);
   const router = useRouter();
   const { t, locale } = useI18n();
 
@@ -89,6 +90,12 @@ export default function DashboardPage() {
         workflowApi.list(0, 100, signal),
         taskApi.list({ page_size: 200, signal }),
       ]);
+
+      // 质量趋势（独立加载，失败不阻塞）
+      try {
+        const qTrends = await dashboardApi.qualityTrends(30, signal);
+        if (!signal?.aborted) setQualityTrends(qTrends.trends);
+      } catch { /* 无质量数据时静默忽略 */ }
       if (signal?.aborted) return;
       setStats(statsData);
       setRecentTasks(tasksData.items);
@@ -376,6 +383,32 @@ export default function DashboardPage() {
             </Card>
           </Col>
         </Row>
+
+        {/* 质量趋势 */}
+        {qualityTrends.length > 0 && (
+          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+            <Col span={24}>
+              <Card title={locale === "zh" ? "AI 质量趋势" : "AI Quality Trends"}>
+                <Line
+                  data={qualityTrends.flatMap((d) => [
+                    { date: d.date.slice(5), score: d.avg_correctness, type: locale === "zh" ? "正确性" : "Correctness" },
+                    { date: d.date.slice(5), score: d.avg_completeness, type: locale === "zh" ? "完整性" : "Completeness" },
+                    { date: d.date.slice(5), score: d.avg_security, type: locale === "zh" ? "安全性" : "Security" },
+                    { date: d.date.slice(5), score: d.avg_style, type: locale === "zh" ? "代码风格" : "Style" },
+                  ])}
+                  xField="date"
+                  yField="score"
+                  colorField="type"
+                  smooth
+                  height={280}
+                  yAxis={{ min: 0, max: 10, title: { text: locale === "zh" ? "评分" : "Score" } }}
+                  point={{ size: 3 }}
+                  legend={{ position: "top" }}
+                />
+              </Card>
+            </Col>
+          </Row>
+        )}
 
         {/* 最近任务 */}
         <Card

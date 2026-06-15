@@ -15,6 +15,8 @@ class ApprovalResponse(BaseModel):
     approver: str | None = None
     comment: str | None = None
     decided_at: datetime | None = None
+    revoked_at: datetime | None = None
+    revoke_reason: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

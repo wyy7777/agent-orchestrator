@@ -78,3 +78,6 @@ docs/路线图.md
 backend/examples/
 test_full.py
 backend/logs/
+*.bak
+*_backup_*
+*_backup.*

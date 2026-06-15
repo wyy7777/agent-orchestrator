@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_role
 from app.database import get_db
 from app.models.workflow import Workflow
+from app.models.user import User
 from app.schemas.workflow import (
     WorkflowCreate,
     WorkflowListResponse,
@@ -31,7 +33,7 @@ async def list_workflows(
 
 
 @router.post("", response_model=WorkflowResponse, status_code=201)
-async def create_workflow(body: WorkflowCreate, db: AsyncSession = Depends(get_db)):
+async def create_workflow(body: WorkflowCreate, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator"))):
     valid, error = validate_workflow_yaml(body.yaml_definition)
     if not valid:
         raise HTTPException(status_code=400, detail=f"YAML 格式错误: {error}")
@@ -63,7 +65,8 @@ async def get_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{workflow_id}", response_model=WorkflowResponse)
 async def update_workflow(
-    workflow_id: str, body: WorkflowUpdate, db: AsyncSession = Depends(get_db)
+    workflow_id: str, body: WorkflowUpdate, db: AsyncSession = Depends(get_db),
+    _user: User = Depends(require_role("admin", "manager", "operator")),
 ):
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     workflow = result.scalar_one_or_none()
@@ -88,7 +91,7 @@ async def update_workflow(
 
 
 @router.delete("/{workflow_id}", status_code=204)
-async def delete_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_workflow(workflow_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager"))):
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     workflow = result.scalar_one_or_none()
     if not workflow:
@@ -131,7 +134,7 @@ async def list_templates():
 
 
 @router.post("/templates/{index}", response_model=WorkflowResponse, status_code=201)
-async def import_template(index: int, db: AsyncSession = Depends(get_db)):
+async def import_template(index: int, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator"))):
     """从模板库导入一个工作流。"""
     templates = _load_templates()
     if index < 0 or index >= len(templates):
@@ -164,7 +167,7 @@ from datetime import datetime
 
 
 @router.get("/{workflow_id}/share")
-async def share_workflow(workflow_id: str, db: AsyncSession = Depends(get_db)):
+async def share_workflow(workflow_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager"))):
     """生成工作流分享链接。"""
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     workflow = result.scalar_one_or_none()

@@ -66,8 +66,8 @@ def _evaluate_single(expr: str) -> bool:
     """评估单个条件表达式。"""
     expr = expr.strip()
 
-    # 尝试解析比较表达式（优先于存在性检查）
-    for op_str, op_func in _OPERATORS.items():
+    # 按长度降序遍历，确保 >= 优先于 >、<= 优先于 <
+    for op_str, op_func in sorted(_OPERATORS.items(), key=lambda x: -len(x[0])):
         if op_str in expr:
             left, right = expr.split(op_str, 1)
             left = left.strip().strip('"')

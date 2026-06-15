@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -179,3 +179,44 @@ async def set_admin(
     await db.flush()
     await db.refresh(user)
     return user
+
+
+# ── OAuth2 / SSO ──
+
+from fastapi.responses import RedirectResponse
+from app.auth import (
+    get_oauth2_available_providers,
+    get_oauth2_authorize_url,
+    handle_oauth2_callback,
+)
+
+
+@router.get("/oauth2/providers")
+async def list_oauth2_providers():
+    """列出已配置的 OAuth2 提供商。"""
+    return {"providers": get_oauth2_available_providers()}
+
+
+@router.get("/oauth2/login/{provider}")
+async def oauth2_login(provider: str):
+    """OAuth2 登录：重定向到提供商授权页。"""
+    try:
+        url = get_oauth2_authorize_url(provider)
+        return RedirectResponse(url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/oauth2/callback/{provider}")
+async def oauth2_callback(
+    provider: str,
+    code: str = Query(...),
+    state: str = Query("", description="OAuth2 state 参数（CSRF 防护）"),
+    db: AsyncSession = Depends(get_db),
+):
+    """OAuth2 回调：验证 state，兑换 token，返回 JWT。"""
+    try:
+        token = await handle_oauth2_callback(provider, code, db, state=state)
+        return {"access_token": token, "token_type": "bearer"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

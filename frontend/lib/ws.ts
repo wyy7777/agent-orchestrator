@@ -2,7 +2,7 @@ type MessageHandler = (data: Record<string, unknown>) => void;
 
 function getWsUrl() {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
-  return "ws://127.0.0.1:18000/ws";
+  return "ws://127.0.0.1:8000/ws";
 }
 
 let ws: WebSocket | null = null;

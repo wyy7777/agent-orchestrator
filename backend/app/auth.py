@@ -166,7 +166,7 @@ def require_role(*allowed_roles: str):
     ) -> User:
         user_role = current_user.role or "operator"
         # 管理员始终放行
-        if user_role == "admin":
+        if current_user.is_admin or user_role == "admin":
             return current_user
         # 检查角色是否在允许列表
         if user_role not in allowed_roles:
@@ -201,3 +201,127 @@ def ensure_secret_key():
             logger.warning(f"无法保存 SECRET_KEY 到 .env: {e}")
         # 更新 settings
         settings.SECRET_KEY = new_key
+
+
+# ── OAuth2 / SSO ──
+
+OAUTH2_PROVIDERS = {
+    "google": {
+        "name": "Google",
+        "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "userinfo_url": "https://www.googleapis.com/oauth2/v3/userinfo",
+        "scope": "openid email profile",
+    },
+    "github": {
+        "name": "GitHub",
+        "authorize_url": "https://github.com/login/oauth/authorize",
+        "token_url": "https://github.com/login/oauth/access_token",
+        "userinfo_url": "https://api.github.com/user",
+        "scope": "user:email",
+    },
+    "microsoft": {
+        "name": "Microsoft",
+        "authorize_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        "userinfo_url": "https://graph.microsoft.com/v1.0/me",
+        "scope": "openid email profile",
+    },
+}
+
+
+def get_oauth2_available_providers() -> list[dict]:
+    available = []
+    for key, info in OAUTH2_PROVIDERS.items():
+        client_id = getattr(settings, f"OAUTH2_{key.upper()}_CLIENT_ID", "")
+        if client_id:
+            available.append({"id": key, "name": info["name"]})
+    return available
+
+
+# OAuth2 state store for CSRF protection: state -> (provider, expiry_timestamp)
+_oauth2_states: dict[str, tuple[str, float]] = {}
+_OAUTH2_STATE_TTL = 600  # 10 分钟
+
+
+def get_oauth2_authorize_url(provider: str, state: str = "") -> str:
+    import urllib.parse
+    import time as _time
+    info = OAUTH2_PROVIDERS.get(provider)
+    if not info:
+        raise ValueError(f"未知的 OAuth2 provider: {provider}")
+    client_id = getattr(settings, f"OAUTH2_{provider.upper()}_CLIENT_ID", "")
+    if not client_id:
+        raise ValueError(f"{provider} OAuth2 未配置")
+    redirect_uri = f"{settings.OAUTH2_REDIRECT_BASE}/api/auth/oauth2/callback/{provider}"
+    state_token = state or secrets.token_hex(16)
+    # 存储 state 用于后续验证
+    _oauth2_states[state_token] = (provider, _time.time() + _OAUTH2_STATE_TTL)
+    # 清理过期 state
+    now = _time.time()
+    expired = [k for k, v in _oauth2_states.items() if v[1] < now]
+    for k in expired:
+        del _oauth2_states[k]
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": info["scope"],
+        "state": state_token,
+    }
+    return f"{info['authorize_url']}?{urllib.parse.urlencode(params)}"
+
+
+async def handle_oauth2_callback(provider: str, code: str, db: AsyncSession, state: str = "") -> str:
+    import httpx
+    import time as _time
+    info = OAUTH2_PROVIDERS.get(provider)
+    if not info:
+        raise ValueError(f"未知的 OAuth2 provider: {provider}")
+
+    # 验证 state 参数（CSRF 防护）
+    if state:
+        stored = _oauth2_states.pop(state, None)
+        if stored is None:
+            raise ValueError("无效的 OAuth2 state 参数（可能为 CSRF 攻击）")
+        stored_provider, expiry = stored
+        if _time.time() > expiry:
+            raise ValueError("OAuth2 state 已过期，请重新登录")
+        if stored_provider != provider:
+            raise ValueError("OAuth2 state 与 provider 不匹配")
+    else:
+        logger.warning("OAuth2 回调缺少 state 参数，跳过 CSRF 验证（不安全）")
+    client_id = getattr(settings, f"OAUTH2_{provider.upper()}_CLIENT_ID", "")
+    client_secret = getattr(settings, f"OAUTH2_{provider.upper()}_CLIENT_SECRET", "")
+    redirect_uri = f"{settings.OAUTH2_REDIRECT_BASE}/api/auth/oauth2/callback/{provider}"
+
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(info["token_url"], data={
+            "client_id": client_id, "client_secret": client_secret,
+            "code": code, "redirect_uri": redirect_uri, "grant_type": "authorization_code",
+        }, headers={"Accept": "application/json"}, timeout=30)
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise ValueError(f"OAuth2 token 交换失败: {token_data}")
+
+        user_resp = await client.get(info["userinfo_url"],
+            headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+        user_data = user_resp.json()
+
+    email = user_data.get("email", "")
+    username = user_data.get("login") or user_data.get("name") or email.split("@")[0]
+    if not email:
+        email = f"{username}@{provider}.user"
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(username=username, email=email,
+            hashed_password=await hash_password(secrets.token_hex(32)),
+            is_active=True, role="operator")
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    return create_access_token({"sub": user.id})

@@ -57,7 +57,7 @@ def start(
 @app.command()
 def version():
     """显示版本信息"""
-    typer.echo("Agent Orchestrator v0.2.0")
+    typer.echo("Agent Orchestrator v1.1.0")
 
 
 @app.command()

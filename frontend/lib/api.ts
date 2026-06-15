@@ -2,6 +2,29 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 const REQUEST_TIMEOUT = 30000; // 30 秒
 
+// === Token 管理 ===
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
+}
+
+export function setToken(token: string): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("token", token);
+  }
+}
+
+export function removeToken(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
+  }
+}
+
+export function isAuthenticated(): boolean {
+  return !!getToken();
+}
+
 /** 友好的错误提示 */
 function getFriendlyError(status: number, detail: string): string {
   if (status === 401) return "认证失败，请重新登录";
@@ -33,14 +56,28 @@ async function request<T>(
 
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
+  // 构建 headers：自动附加 JWT token
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((options?.headers as Record<string, string>) || {}),
+  };
+  const token = getToken();
+  if (token && !headers["Authorization"]) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   try {
     const res = await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json", ...options?.headers },
+      headers,
       signal: controller.signal,
       ...options,
     });
 
     if (!res.ok) {
+      // 401 时自动清除过期 token
+      if (res.status === 401 && token) {
+        removeToken();
+      }
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(getFriendlyError(res.status, err.detail));
     }
@@ -55,6 +92,57 @@ async function request<T>(
     clearTimeout(timeoutId);
   }
 }
+
+// === Auth ===
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  refresh_token?: string;
+}
+
+export const authApi = {
+  login: async (username: string, password: string): Promise<LoginResponse> => {
+    const data = await request<LoginResponse>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+    setToken(data.access_token);
+    if (data.refresh_token) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("refresh_token", data.refresh_token);
+      }
+    }
+    return data;
+  },
+  logout: (): void => {
+    removeToken();
+  },
+  register: (data: { username: string; email: string; password: string }) =>
+    request<{ id: string; username: string; email: string }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  refresh: async (): Promise<LoginResponse | null> => {
+    if (typeof window === "undefined") return null;
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) return null;
+    try {
+      const data = await request<LoginResponse>("/api/auth/refresh", {
+        method: "POST",
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      setToken(data.access_token);
+      if (data.refresh_token) {
+        localStorage.setItem("refresh_token", data.refresh_token);
+      }
+      return data;
+    } catch {
+      removeToken();
+      return null;
+    }
+  },
+  me: () => request<{ id: string; username: string; email: string; role: string }>("/api/auth/me"),
+};
 
 // === Workflow ===
 export interface WorkflowItem {
@@ -322,8 +410,12 @@ export const auditApi = {
     request<AuditReportListResponse>("/api/audit/reports", { signal }),
   generateReport: async (startDate: string, endDate: string, format: string = "csv") => {
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(
-      `${API_BASE}/api/audit/report?start_date=${startDate}&end_date=${endDate}&format=${format}`
+      `${API_BASE}/api/audit/report?start_date=${startDate}&end_date=${endDate}&format=${format}`,
+      { headers }
     );
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));

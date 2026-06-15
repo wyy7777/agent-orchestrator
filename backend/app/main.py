@@ -4,6 +4,7 @@ import uuid
 import time
 from pathlib import Path
 from collections import defaultdict
+from ipaddress import ip_address, ip_network
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -18,6 +19,11 @@ from app.logging_config import setup_logging
 from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications, plugins
 from app.api import sandboxes
 from app.api import audit
+from app.api.agents import router as agents_router
+from app.api.approval_policies import router as approval_policies_router
+from app.api.integrations import router as integrations_router
+from app.api.metrics import router as metrics_router
+from app.api.plugin_marketplace import router as plugin_marketplace_router
 from app.api.auth import router as auth_router
 from app.services.ws_manager import ws_manager
 from app.services.scheduler import scheduler
@@ -93,6 +99,13 @@ async def lifespan(app: FastAPI):
         engine = ExecutionEngine(db, on_event=_engine_event_handler)
         await engine.recover_orphaned_tasks()
 
+        # 恢复断路器状态
+        from app.engine.circuit_breaker import circuit_breaker
+        await circuit_breaker.restore_from_db(db)
+
+        # 恢复调度器状态
+        await scheduler.load_from_db(db)
+
     # 加载外部插件
     from app.engine.plugin import load_external_plugins
     load_external_plugins()
@@ -157,6 +170,11 @@ app.include_router(notifications.router)
 app.include_router(plugins.router)
 app.include_router(sandboxes.router)
 app.include_router(audit.router)
+app.include_router(approval_policies_router)
+app.include_router(agents_router)
+app.include_router(integrations_router)
+app.include_router(metrics_router)
+app.include_router(plugin_marketplace_router)
 
 
 # API Key 认证中间件
@@ -179,6 +197,27 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(APIKeyMiddleware)
+
+
+class IPWhitelistMiddleware(BaseHTTPMiddleware):
+    """IP 白名单中间件：ALLOWED_IPS 不为空时只允许白名单 IP。"""
+
+    async def dispatch(self, request: Request, call_next):
+        if not settings.ALLOWED_IPS:
+            return await call_next(request)
+        client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "127.0.0.1")
+        client_ip = client_ip.split(",")[0].strip()
+        try:
+            addr = ip_address(client_ip)
+            for cidr in settings.ALLOWED_IPS.split(","):
+                if addr in ip_network(cidr.strip()):
+                    return await call_next(request)
+        except ValueError:
+            pass
+        return JSONResponse(status_code=403, content={"detail": "IP 不在白名单中"})
+
+
+app.add_middleware(IPWhitelistMiddleware)
 
 
 @app.middleware("http")

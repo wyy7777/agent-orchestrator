@@ -1,4 +1,4 @@
-"""简单的工作流 Cron 调度器，基于 asyncio 实现。"""
+"""工作流 Cron 调度器：DB 持久化 + asyncio 执行。"""
 
 import asyncio
 import logging
@@ -23,17 +23,44 @@ class Schedule:
 
 
 class WorkflowScheduler:
-    """基于 asyncio 的 Cron 调度器，用于定时触发工作流任务。"""
+    """基于 asyncio 的 Cron 调度器，DB 持久化 + 内存缓存。"""
 
     def __init__(self):
         self._schedules: dict[str, Schedule] = {}
         self._task: asyncio.Task | None = None
         self._running = False
+        self._db_loaded = False
 
-    def add_schedule(
-        self, workflow_id: str, cron_expr: str, payload: dict | None = None
+    async def load_from_db(self, db):
+        """启动时从数据库加载所有启用的调度。"""
+        try:
+            from sqlalchemy import select
+            from app.models.schedule import ScheduleModel
+
+            result = await db.execute(select(ScheduleModel))
+            models = result.scalars().all()
+
+            for m in models:
+                self._schedules[m.id] = Schedule(
+                    id=m.id,
+                    workflow_id=m.workflow_id,
+                    cron_expr=m.cron_expr,
+                    payload=m.payload or {},
+                    enabled=m.enabled,
+                    created_at=m.created_at,
+                    last_triggered_at=m.last_triggered_at,
+                )
+
+            self._db_loaded = True
+            logger.info(f"调度器已从 DB 恢复: {len(models)} 条调度")
+        except Exception as e:
+            logger.warning(f"调度器 DB 恢复失败（将使用空状态）: {e}")
+            self._db_loaded = True
+
+    async def add_schedule(
+        self, workflow_id: str, cron_expr: str, payload: dict | None = None, db=None
     ) -> Schedule:
-        """添加一条调度配置。"""
+        """添加一条调度配置（同步写 DB）。"""
         if not croniter.is_valid(cron_expr):
             raise ValueError(f"无效的 cron 表达式: {cron_expr}")
 
@@ -45,23 +72,35 @@ class WorkflowScheduler:
             payload=payload or {},
         )
         self._schedules[schedule_id] = schedule
+
+        # 持久化到 DB
+        if db:
+            await self._persist_add(schedule, db)
+
         logger.info(f"已添加调度 {schedule_id}: workflow={workflow_id}, cron={cron_expr}")
         return schedule
 
-    def remove_schedule(self, schedule_id: str) -> bool:
-        """移除一条调度配置。"""
+    async def remove_schedule(self, schedule_id: str, db=None) -> bool:
+        """移除一条调度配置（同步删 DB）。"""
         removed = self._schedules.pop(schedule_id, None)
         if removed:
+            if db:
+                await self._persist_delete(schedule_id, db)
             logger.info(f"已移除调度 {schedule_id}")
             return True
         return False
 
-    def toggle_schedule(self, schedule_id: str, enabled: bool) -> Schedule | None:
+    async def toggle_schedule(self, schedule_id: str, enabled: bool, db=None) -> Schedule | None:
         """启用/禁用一条调度配置。"""
         schedule = self._schedules.get(schedule_id)
         if not schedule:
             return None
         schedule.enabled = enabled
+
+        # 持久化到 DB
+        if db:
+            await self._persist_toggle(schedule_id, enabled, db)
+
         logger.info(f"调度 {schedule_id} 已{'启用' if enabled else '禁用'}")
         return schedule
 
@@ -133,11 +172,81 @@ class WorkflowScheduler:
                 await db.flush()
                 await db.refresh(task)
 
+                # 更新 last_triggered_at 到 DB
+                await self._persist_trigger_time(schedule.id, schedule.last_triggered_at, db)
+
                 engine = ExecutionEngine(db, on_event=_engine_event_handler)
                 await engine.start_task(task.id)
                 logger.info(f"调度 {schedule.id} 已创建并启动任务 {task.id}")
         except Exception as e:
             logger.error(f"调度 {schedule.id} 触发失败: {e}")
+
+    # ── DB 持久化辅助方法 ──
+
+    async def _persist_add(self, schedule: Schedule, db):
+        """将新调度写入 DB。"""
+        try:
+            from app.models.schedule import ScheduleModel
+
+            model = ScheduleModel(
+                id=schedule.id,
+                workflow_id=schedule.workflow_id,
+                cron_expr=schedule.cron_expr,
+                payload=schedule.payload,
+                enabled=schedule.enabled,
+            )
+            db.add(model)
+            await db.flush()
+        except Exception as e:
+            logger.warning(f"调度持久化(添加)失败: {e}")
+
+    async def _persist_delete(self, schedule_id: str, db):
+        """从 DB 删除调度。"""
+        try:
+            from sqlalchemy import select
+            from app.models.schedule import ScheduleModel
+
+            result = await db.execute(
+                select(ScheduleModel).where(ScheduleModel.id == schedule_id)
+            )
+            model = result.scalar_one_or_none()
+            if model:
+                await db.delete(model)
+                await db.flush()
+        except Exception as e:
+            logger.warning(f"调度持久化(删除)失败: {e}")
+
+    async def _persist_toggle(self, schedule_id: str, enabled: bool, db):
+        """更新 DB 中的调度启用状态。"""
+        try:
+            from sqlalchemy import select
+            from app.models.schedule import ScheduleModel
+
+            result = await db.execute(
+                select(ScheduleModel).where(ScheduleModel.id == schedule_id)
+            )
+            model = result.scalar_one_or_none()
+            if model:
+                model.enabled = enabled
+                await db.flush()
+        except Exception as e:
+            logger.warning(f"调度持久化(切换)失败: {e}")
+
+    async def _persist_trigger_time(self, schedule_id: str, triggered_at: datetime, db):
+        """更新 DB 中的最后触发时间。"""
+        try:
+            from sqlalchemy import select
+            from app.models.schedule import ScheduleModel
+
+            result = await db.execute(
+                select(ScheduleModel).where(ScheduleModel.id == schedule_id)
+            )
+            model = result.scalar_one_or_none()
+            if model:
+                model.last_triggered_at = triggered_at
+                await db.flush()
+        except Exception as e:
+            logger.warning(f"调度持久化(触发时间)失败: {e}")
 
 
 # 全局单例

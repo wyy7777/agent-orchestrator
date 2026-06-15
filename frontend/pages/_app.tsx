@@ -7,6 +7,7 @@ import OnboardingWizard from "@/components/OnboardingWizard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useState, useEffect, useCallback } from "react";
 import { I18nContext, t, type Locale } from "@/lib/i18n";
+import "@/lib/monaco-config"; // 配置 Monaco Editor CDN（国内镜像）
 import "../styles/globals.css";
 
 export default function App({ Component, pageProps }: AppProps) {

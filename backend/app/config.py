@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "Agent Orchestrator"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.1.0"
     DEBUG: bool = False
 
     # 数据库
@@ -61,12 +61,27 @@ class Settings(BaseSettings):
     NOTIFY_ON_APPROVAL_NEEDED: bool = True
 
     # JWT 认证
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 小时
 
     # 服务器
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+
+    # SSO / OAuth2
+    OAUTH2_ENABLED: bool = False
+    OAUTH2_GOOGLE_CLIENT_ID: str = ""
+    OAUTH2_GOOGLE_CLIENT_SECRET: str = ""
+    OAUTH2_GITHUB_CLIENT_ID: str = ""
+    OAUTH2_GITHUB_CLIENT_SECRET: str = ""
+    OAUTH2_MICROSOFT_CLIENT_ID: str = ""
+    OAUTH2_MICROSOFT_CLIENT_SECRET: str = ""
+    OAUTH2_REDIRECT_BASE: str = "http://localhost:8000"
+
+    # 数据安全
+    DATA_RETENTION_DAYS: int = 0  # 0 = 不自动清理，>0 清理 N 天前的数据
+    ENCRYPTION_KEY: str = ""  # AES-256 密钥，留空则自动生成
+    ALLOWED_IPS: str = ""  # IP 白名单，逗号分隔的 CIDR，留空不限制
 
     model_config = {
         "env_file": os.environ.get("AGENT_ORCH_DOTENV", ".env"),

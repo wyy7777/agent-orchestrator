@@ -178,6 +178,32 @@ const translations: Record<Locale, Record<string, string>> = {
     "audit.size": "大小",
     "audit.no_reports": "暂无报告，选择日期范围并点击"生成并下载"",
 
+    // 登录
+    "login.title": "Agent Orchestrator",
+    "login.subtitle": "AI Agent 工作流编排平台",
+    "login.skip": "跳过登录，直接使用",
+    "login.skip_hint": "本地单用户模式，无需注册",
+    "login.or": "或",
+    "login.login": "登录",
+    "login.register": "注册",
+    "login.username": "用户名",
+    "login.password": "密码",
+    "login.email": "邮箱",
+    "login.remember_me": "记住我",
+    "login.sso_with": "使用 {provider} 登录",
+    "login.username_required": "请输入用户名",
+    "login.password_required": "请输入密码",
+    "login.password_min": "密码至少8位，包含大小写字母和数字",
+    "login.email_required": "请输入有效邮箱",
+    "login.success": "登录成功",
+    "login.register_success": "注册成功，请登录",
+    "login.init_success": "已进入本地模式",
+    "login.init_failed": "初始化失败",
+
+    // WebSocket
+    "ws.disconnected": "连接已断开，正在重连...",
+    "ws.reconnected": "已重新连接",
+
     // 沙箱
     "sandbox.title": "沙箱",
     "sandbox.create": "创建沙箱",
@@ -352,6 +378,32 @@ const translations: Record<Locale, Record<string, string>> = {
     "sandbox.mode": "Mode",
     "sandbox.local": "Local",
     "sandbox.docker": "Docker",
+
+    // Login
+    "login.title": "Agent Orchestrator",
+    "login.subtitle": "AI Agent Workflow Orchestration Platform",
+    "login.skip": "Skip Login, Use Directly",
+    "login.skip_hint": "Local single-user mode, no registration required",
+    "login.or": "or",
+    "login.login": "Login",
+    "login.register": "Register",
+    "login.username": "Username",
+    "login.password": "Password",
+    "login.email": "Email",
+    "login.remember_me": "Remember me",
+    "login.sso_with": "Sign in with {provider}",
+    "login.username_required": "Please enter username",
+    "login.password_required": "Please enter password",
+    "login.password_min": "Password must be at least 8 characters with uppercase, lowercase and numbers",
+    "login.email_required": "Please enter a valid email",
+    "login.success": "Login successful",
+    "login.register_success": "Registration successful, please login",
+    "login.init_success": "Entered local mode",
+    "login.init_failed": "Initialization failed",
+
+    // WebSocket
+    "ws.disconnected": "Connection lost, reconnecting...",
+    "ws.reconnected": "Reconnected",
   },
 };
 

@@ -178,7 +178,7 @@ class ExecutionEngine:
                 }
 
                 # 分组步骤
-                step_groups = self._group_steps(steps, workflow_def, context, db, task_id)
+                step_groups = await self._group_steps(steps, workflow_def, context, db, task_id)
 
                 # 逐组执行
                 for group in step_groups:
@@ -223,7 +223,7 @@ class ExecutionEngine:
 
                 # 断路器：记录成功
                 from app.engine.circuit_breaker import circuit_breaker
-                circuit_breaker.record_success(task.workflow_id)
+                await circuit_breaker.record_success(task.workflow_id, db=db)
 
         except Exception as e:
             logger.error(f"工作流执行异常: {e}", exc_info=True)
@@ -241,7 +241,7 @@ class ExecutionEngine:
         finally:
             self._running_tasks.pop(task_id, None)
 
-    def _group_steps(
+    async def _group_steps(
         self,
         steps: list[StepExecution],
         workflow_def: WorkflowDefinition,
@@ -262,7 +262,7 @@ class ExecutionEngine:
 
             # 条件检查
             if step_def.condition:
-                should_continue = self._handle_condition(step_exec, step_def, context, db, task_id)
+                should_continue = await self._handle_condition(step_exec, step_def, context, db, task_id)
                 if should_continue:
                     continue
 
@@ -278,7 +278,7 @@ class ExecutionEngine:
 
         return step_groups
 
-    def _handle_condition(
+    async def _handle_condition(
         self,
         step_exec: StepExecution,
         step_def: StepDefinition,
@@ -298,7 +298,7 @@ class ExecutionEngine:
 
         # 执行 else 分支
         if step_def.else_steps:
-            self._execute_else_steps(step_exec, step_def, context, db, task_id)
+            await self._execute_else_steps(step_exec, step_def, context, db, task_id)
 
         return True  # 跳过此步骤
 
@@ -424,7 +424,7 @@ class ExecutionEngine:
 
         # 断路器：记录失败
         from app.engine.circuit_breaker import circuit_breaker
-        circuit_breaker.record_failure(task.workflow_id)
+        await circuit_breaker.record_failure(task.workflow_id, db=db)
 
     async def _emit_step_completed(self, task_id: str, step_name: str):
         """步骤完成事件。"""

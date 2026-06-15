@@ -1,52 +1,62 @@
 name: CI
+
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
-  backend-lint:
+  lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-        working-directory: backend
-      - name: Lint with Ruff
-        run: ruff check .
-        working-directory: backend
 
-  backend-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: |
+          cd backend
+          ruff check app/ cli.py
+
+      - name: Test with coverage
+        run: |
+          cd backend
+          pytest --cov=app --cov-report=term-missing --cov-report=xml -v --tb=short \
+            --timeout=30 \
+            -k "not test_e2e"  # E2E 需要运行服务，单测阶段跳过
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
         with:
-          python-version: "3.12"
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-        working-directory: backend
-      - name: Run tests
-        run: pytest -v --tb=short
-        working-directory: backend
-        env:
-          DATABASE_URL: "sqlite+aiosqlite:///./test.db"
-          DEBUG: "false"
+          files: backend/coverage.xml
+          flags: unittests
+        continue-on-error: true
 
-  frontend-build:
+  build-frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install dependencies
-        run: npm ci
-        working-directory: frontend
-      - name: Build
-        run: npm run build
-        working-directory: frontend
+
+      - name: Install & Build
+        run: |
+          cd frontend
+          npm ci
+          npm run build

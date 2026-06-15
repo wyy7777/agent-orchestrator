@@ -257,6 +257,47 @@ export default function TaskDetailPage() {
               </Descriptions.Item>
             </Descriptions>
 
+            {selectedStep.quality_score && (
+              <>
+                <Divider>AI 质量评分</Divider>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  {[
+                    { key: "correctness", label: "正确性", color: "#1677ff" },
+                    { key: "completeness", label: "完整性", color: "#52c41a" },
+                    { key: "security", label: "安全性", color: "#faad14" },
+                    { key: "style", label: "代码风格", color: "#722ed1" },
+                  ].map((dim) => {
+                    const score = selectedStep.quality_score?.[dim.key] ?? -1;
+                    return (
+                      <div
+                        key={dim.key}
+                        style={{
+                          flex: 1,
+                          textAlign: "center",
+                          padding: "12px 8px",
+                          background: "#fafafa",
+                          borderRadius: 8,
+                          border: `1px solid ${dim.color}20`,
+                        }}
+                      >
+                        <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>
+                          {dim.label}
+                        </div>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: score >= 7 ? "#52c41a" : score >= 4 ? "#faad14" : "#ff4d4f" }}>
+                          {score >= 0 ? `${score}/10` : "—"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {selectedStep.quality_score?.summary && (
+                  <Paragraph style={{ marginTop: 12, fontSize: 13, color: "#666", fontStyle: "italic" }}>
+                    💬 {selectedStep.quality_score.summary}
+                  </Paragraph>
+                )}
+              </>
+            )}
+
             {selectedStep.output_data && (
               <>
                 <Divider>输出</Divider>
