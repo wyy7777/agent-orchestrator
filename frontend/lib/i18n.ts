@@ -176,7 +176,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "audit.format_detailed": "步骤详情 (Detailed CSV)",
     "audit.sha256": "SHA-256 签名",
     "audit.size": "大小",
-    "audit.no_reports": "暂无报告，选择日期范围并点击"生成并下载"",
+    "audit.no_reports": "暂无报告，选择日期范围并点击「生成并下载」",
 
     // 登录
     "login.title": "Agent Orchestrator",
@@ -368,7 +368,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "audit.format_detailed": "Step Details (Detailed CSV)",
     "audit.sha256": "SHA-256 Signature",
     "audit.size": "Size",
-    "audit.no_reports": "No reports yet. Select a date range and click "Generate & Download"",
+    "audit.no_reports": "No reports yet. Select a date range and click 'Generate & Download'",
 
     // Sandbox
     "sandbox.title": "Sandboxes",

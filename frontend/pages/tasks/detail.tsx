@@ -267,7 +267,7 @@ export default function TaskDetailPage() {
                     { key: "security", label: "安全性", color: "#faad14" },
                     { key: "style", label: "代码风格", color: "#722ed1" },
                   ].map((dim) => {
-                    const score = selectedStep.quality_score?.[dim.key] ?? -1;
+                    const score = Number(selectedStep.quality_score?.[dim.key]) || -1;
                     return (
                       <div
                         key={dim.key}
@@ -292,7 +292,7 @@ export default function TaskDetailPage() {
                 </div>
                 {selectedStep.quality_score?.summary && (
                   <Paragraph style={{ marginTop: 12, fontSize: 13, color: "#666", fontStyle: "italic" }}>
-                    💬 {selectedStep.quality_score.summary}
+                    💬 {String(selectedStep.quality_score.summary)}
                   </Paragraph>
                 )}
               </>

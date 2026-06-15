@@ -142,7 +142,7 @@ export default function AuditPage() {
           rowKey="id"
           loading={loading}
           pagination={false}
-          locale={{ emptyText: <Empty description="暂无报告，选择日期范围并点击"生成并下载"" /> }}
+          locale={{ emptyText: <Empty description={"暂无报告，选择日期范围并点击「生成并下载」"} /> }}
         />
       </Card>
     </div>
