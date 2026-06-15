@@ -300,6 +300,8 @@ export interface ApprovalItem {
   approver: string | null;
   comment: string | null;
   decided_at: string | null;
+  revoked_at: string | null;
+  revoke_reason: string | null;
   created_at: string;
 }
 
@@ -317,6 +319,11 @@ export const approvalApi = {
     request<ApprovalItem>(`/api/approvals/${id}/decide`, {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+  revoke: (id: string, reason?: string) =>
+    request<ApprovalItem>(`/api/approvals/${id}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason || "" }),
     }),
 };
 
