@@ -57,9 +57,9 @@ jobs:
       - uses: actions/download-artifact@v4
       - name: Package release
         run: |
-          mkdir -p release/agent-orchestrator
-          cp backend/dist/agent-orch-backend release/agent-orchestrator/
-          cp -r frontend/out release/agent-orchestrator/static
+          mkdir -p release/agent-orchestrator/static
+          cp backend-linux/agent-orch-backend release/agent-orchestrator/
+          cp -r frontend-static/* release/agent-orchestrator/static/
           cp backend/cli.py release/agent-orchestrator/
           cp backend/pyproject.toml release/agent-orchestrator/
           cp -r backend/app release/agent-orchestrator/app

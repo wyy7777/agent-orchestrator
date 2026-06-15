@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import datetime
+import re
+import shlex
+import tempfile
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import AgentResponse, get_agent, _get_friendly_error
+from app.agents.base import _get_friendly_error, get_agent
 from app.agents.schemas import AnalysisOutput, ExecuteOutput, ReviewOutput, validate_agent_output
 from app.config import settings
 from app.engine.state_machine import StepHandler, register_handler
@@ -483,19 +486,18 @@ class ScriptHandler(StepHandler):
     """脚本步骤：执行 shell 命令（带注入防护）。"""
 
     # 危险命令模式黑名单（正则）
-    import re as _re
     _BLOCKED_PATTERNS = [
-        _re.compile(r"\brm\s+-rf\s+/\b"),          # rm -rf /
-        _re.compile(r"\bmkfs\b"),                    # mkfs (格式化)
-        _re.compile(r"\bdd\s+if="),                  # dd if= (磁盘覆写)
-        _re.compile(r":\(\)\{"),                     # fork bomb
-        _re.compile(r"curl\s.*\|\s*(ba)?sh"),        # curl pipe to shell
-        _re.compile(r"wget\s.*\|\s*(ba)?sh"),        # wget pipe to shell
-        _re.compile(r"curl\s.*\|\s*python"),         # curl pipe to python
-        _re.compile(r">\s*/dev/sd"),                 # write to disk device
-        _re.compile(r"\bchmod\s+777\s+/\b"),         # chmod 777 /
-        _re.compile(r"\b(nc|netcat)\s.*-e\s"),       # netcat reverse shell
-        _re.compile(r"python[23]?\s*-c.*import\s+(os|subprocess|socket)"),  # python reverse shell
+        re.compile(r"\brm\s+-rf\s+/\b"),          # rm -rf /
+        re.compile(r"\bmkfs\b"),                    # mkfs (格式化)
+        re.compile(r"\bdd\s+if="),                  # dd if= (磁盘覆写)
+        re.compile(r":\(\)\{"),                     # fork bomb
+        re.compile(r"curl\s.*\|\s*(ba)?sh"),        # curl pipe to shell
+        re.compile(r"wget\s.*\|\s*(ba)?sh"),        # wget pipe to shell
+        re.compile(r"curl\s.*\|\s*python"),         # curl pipe to python
+        re.compile(r">\s*/dev/sd"),                 # write to disk device
+        re.compile(r"\bchmod\s+777\s+/\b"),         # chmod 777 /
+        re.compile(r"\b(nc|netcat)\s.*-e\s"),       # netcat reverse shell
+        re.compile(r"python[23]?\s*-c.*import\s+(os|subprocess|socket)"),  # python reverse shell
     ]
 
     # 最大超时限制
@@ -513,15 +515,11 @@ class ScriptHandler(StepHandler):
     @staticmethod
     def _shell_escape(value: str) -> str:
         """对模板变量值进行 shell 转义，防止注入。"""
-        import shlex
         return shlex.quote(value)
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
-        import asyncio
-        import os
-
         command = step.config.get("command")
         if not command:
             return StepResult(
@@ -566,7 +564,6 @@ class ScriptHandler(StepHandler):
         cwd = step.config.get("cwd")
 
         # 受限环境变量：清理危险变量，设置安全 HOME
-        import tempfile
         safe_env = {
             "PATH": "/usr/local/bin:/usr/bin:/bin",
             "LANG": "en_US.UTF-8",
@@ -597,7 +594,7 @@ class ScriptHandler(StepHandler):
                 },
                 error=error[:5000] if proc.returncode != 0 and error else None,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             return StepResult(
                 status="failed",
