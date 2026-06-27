@@ -87,10 +87,11 @@ export default function NotificationsPage() {
     setTestingSlack(true);
     try {
       const res = await notificationApi.testSlack();
-      if (res.success) {
-        message.success(res.message || "Slack 测试发送成功");
+      const allSuccess = Object.values(res.results).every(Boolean);
+      if (allSuccess) {
+        message.success("Slack 测试发送成功");
       } else {
-        message.warning(res.message || "Slack 测试发送失败");
+        message.warning("Slack 测试发送失败");
       }
     } catch {
       message.error("Slack 测试请求失败");
@@ -103,10 +104,11 @@ export default function NotificationsPage() {
     setTestingDingtalk(true);
     try {
       const res = await notificationApi.testDingtalk();
-      if (res.success) {
-        message.success(res.message || "钉钉测试发送成功");
+      const allSuccess = Object.values(res.results).every(Boolean);
+      if (allSuccess) {
+        message.success("钉钉测试发送成功");
       } else {
-        message.warning(res.message || "钉钉测试发送失败");
+        message.warning("钉钉测试发送失败");
       }
     } catch {
       message.error("钉钉测试请求失败");
