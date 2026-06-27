@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # 最小可运行的工作流 YAML
 MINIMAL_WORKFLOW_YAML = """
 name: E2E冒烟测试

@@ -2,21 +2,20 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.engine.plugin import list_plugins, get_plugin
-from app.models.user import User
 from app.auth import require_role
+from app.engine.plugin import get_plugin, list_plugins
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/plugins", tags=["plugins"])
+router = APIRouter(prefix="/api/plugin-marketplace", tags=["plugins"])
 
 
 # ── Pydantic schemas ──
@@ -36,9 +35,9 @@ class PluginInstall(BaseModel):
 
 # ── 内置插件 ──
 
-@router.get("")
-async def list_all_plugins() -> list[PluginResponse]:
-    """列出所有已注册的插件。"""
+@router.get("/list")
+async def list_marketplace_plugins() -> list[PluginResponse]:
+    """列出市场上所有可安装的插件。"""
     plugins = list_plugins()
     return [PluginResponse(
         name=p["name"],
@@ -49,7 +48,7 @@ async def list_all_plugins() -> list[PluginResponse]:
     ) for p in plugins]
 
 
-@router.get("/{plugin_name}")
+@router.get("/detail/{plugin_name}")
 async def get_plugin_detail(plugin_name: str) -> PluginResponse:
     """获取插件详情。"""
     plugin = get_plugin(plugin_name)
@@ -70,8 +69,9 @@ async def install_plugin(
     _user: User = Depends(require_role("admin", "manager")),
 ):
     """从 URL 安装插件（下载到 plugins/ 目录）。"""
-    import httpx
     from pathlib import Path
+
+    import httpx
 
     plugin_dir = Path(__file__).parent.parent.parent / "plugins"
     plugin_dir.mkdir(exist_ok=True)

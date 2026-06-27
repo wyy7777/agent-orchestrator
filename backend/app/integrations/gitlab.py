@@ -1,7 +1,6 @@
 """GitLab 集成：项目信息获取、分支创建、文件写入、MR 创建。"""
 
 import logging
-from typing import Any
 
 import httpx
 

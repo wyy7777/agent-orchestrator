@@ -2,21 +2,20 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from app.database import get_db
-from app.models.approval import Approval
-from app.models.approval_policy import ApprovalPolicy, get_matching_policies
-from app.models.step_execution import StepExecution
-from app.models.task import Task
-from app.models.user import User
 from app.auth import require_role
-from app.services.ws_manager import ws_manager
+from app.database import get_db
+from app.models.approval_policy import ApprovalPolicy, get_matching_policies
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.models.user import User
 
 logger = logging.getLogger(__name__)
 

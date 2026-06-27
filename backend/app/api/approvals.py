@@ -1,19 +1,19 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db, async_session
+from app.auth import require_role
+from app.database import async_session, get_db
+from app.engine.state_machine import ExecutionEngine
 from app.models.approval import Approval
 from app.models.step_execution import StepExecution
 from app.models.task import Task
 from app.models.user import User
-from app.auth import require_role
 from app.schemas.approval import ApprovalCreate, ApprovalListResponse, ApprovalResponse
-from app.engine.state_machine import ExecutionEngine
 from app.services.ws_manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ async def decide_approval(
     approval.status = body.status
     approval.approver = body.approver
     approval.comment = body.comment
-    approval.decided_at = datetime.now(timezone.utc)
+    approval.decided_at = datetime.now(UTC)
 
     # 更新关联的步骤状态
     step_result = await db.execute(
@@ -79,7 +79,7 @@ async def decide_approval(
 
     if body.status == "approved" and step_exec:
         step_exec.status = "completed"
-        step_exec.completed_at = datetime.now(timezone.utc)
+        step_exec.completed_at = datetime.now(UTC)
         task_id = step_exec.task_id
 
         await db.commit()
@@ -93,14 +93,14 @@ async def decide_approval(
     elif body.status == "rejected" and step_exec:
         step_exec.status = "failed"
         step_exec.error_message = body.comment or "审批被拒绝"
-        step_exec.completed_at = datetime.now(timezone.utc)
+        step_exec.completed_at = datetime.now(UTC)
 
         task_result = await db.execute(select(Task).where(Task.id == step_exec.task_id))
         task = task_result.scalar_one_or_none()
         if task:
             task.status = "failed"
             task.error_message = f"步骤 '{step_exec.step_name}' 审批被拒绝"
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
 
         await db.commit()
 
@@ -141,7 +141,7 @@ async def batch_decide(
         approval.status = "approved" if body.action == "approve" else "rejected"
         approval.approver = _user.username
         approval.comment = body.comment
-        approval.decided_at = datetime.now(timezone.utc)
+        approval.decided_at = datetime.now(UTC)
 
         # 更新关联步骤
         step_result = await db.execute(
@@ -151,7 +151,7 @@ async def batch_decide(
         if step_exec:
             if body.action == "approve":
                 step_exec.status = "completed"
-                step_exec.completed_at = datetime.now(timezone.utc)
+                step_exec.completed_at = datetime.now(UTC)
             else:
                 step_exec.status = "failed"
                 step_exec.error_message = body.comment or "批量审批拒绝"
@@ -205,7 +205,7 @@ async def revoke_approval(
 
     # 撤销审批
     approval.status = "revoked"
-    approval.revoked_at = datetime.now(timezone.utc)
+    approval.revoked_at = datetime.now(UTC)
     approval.revoke_reason = body.reason or "审批已撤销"
 
     await db.commit()

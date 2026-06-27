@@ -1,13 +1,11 @@
 """Agent mock 测试。"""
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from app.agents.base import AgentResponse, BaseAgent, get_agent, _retry_with_backoff
-
+from app.agents.base import AgentResponse, BaseAgent, _retry_with_backoff, get_agent
 
 # ---------- 测试 AgentResponse ----------
 
@@ -155,3 +153,27 @@ class TestBaseAgent:
         agent = MockAgent()
         resp = await agent.run("system", "user")
         assert resp.parsed == {"result": "ok"}
+
+
+# ---------- 测试 Ollama Agent ----------
+
+
+class TestOllamaAgent:
+    """测试 Ollama Agent 工厂函数。"""
+
+    def test_get_ollama_agent(self):
+        """获取 Ollama Agent。"""
+        agent = get_agent("ollama", "qwen2.5-coder:7b")
+        assert agent is not None
+        assert agent.model == "qwen2.5-coder:7b"
+
+    def test_get_ollama_default_model(self):
+        """Ollama Agent 默认模型。"""
+        agent = get_agent("ollama")
+        assert agent.model == "qwen2.5-coder:7b"
+
+    def test_provider_strings(self):
+        """所有支持的 provider 应返回有效 agent。"""
+        for provider in ["deepseek", "openai", "claude", "ollama"]:
+            agent = get_agent(provider)
+            assert agent is not None, f"Provider {provider} 应返回有效 agent"

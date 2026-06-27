@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from functools import lru_cache
 from typing import Any
 
 import yaml
@@ -27,9 +26,9 @@ class StepDefinition:
     prompt_template: str | None = None
     timeout: int = field(default_factory=lambda: settings.DEFAULT_STEP_TIMEOUT)
     parallel: bool = False
-    steps: list["StepDefinition"] = field(default_factory=list)  # loop 子步骤
+    steps: list[StepDefinition] = field(default_factory=list)  # loop 子步骤
     condition: str | None = None  # 条件表达式，如 "{result.score} > 80"
-    else_steps: list["StepDefinition"] = field(default_factory=list)  # else 分支步骤
+    else_steps: list[StepDefinition] = field(default_factory=list)  # else 分支步骤
     loop_items: str | None = None  # 循环数据源 key
     max_iterations: int = field(default_factory=lambda: settings.DEFAULT_MAX_ITERATIONS)
     subtask_workflow: str | None = None  # 子工作流 ID
@@ -44,7 +43,7 @@ class WorkflowDefinition:
     settings: dict[str, Any] = field(default_factory=dict)
 
 
-VALID_STEP_TYPES = {"analyze", "execute", "review", "approval", "merge", "script", "subtask", "loop", "condition"}
+VALID_STEP_TYPES = {"analyze", "execute", "review", "approval", "merge", "script", "subtask", "loop", "condition", "handoff", "publish"}
 
 # YAML 解析缓存：key=yaml_str 的 hash，value=(WorkflowDefinition, timestamp)
 _parse_cache: dict[str, tuple[WorkflowDefinition, float]] = {}

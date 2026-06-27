@@ -5,25 +5,57 @@ import logging
 import re
 import shlex
 import tempfile
-from typing import Any
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import TYPE_CHECKING, Any
 
 from app.agents.base import _get_friendly_error, get_agent
 from app.agents.schemas import AnalysisOutput, ExecuteOutput, ReviewOutput, validate_agent_output
 from app.config import settings
 from app.engine.state_machine import StepHandler, register_handler
 from app.engine.types import StepResult
-from app.engine.yaml_parser import StepDefinition
 from app.models.agent_config import AgentConfig
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.engine.yaml_parser import StepDefinition
 
 logger = logging.getLogger(__name__)
 
 
-async def _get_agent_from_config(step: StepDefinition, db: AsyncSession) -> tuple[str, str | None]:
-    """从步骤配置中获取 Agent 的 provider 和 model。
+def _find_result_in_context(
+    results: dict[str, Any],
+    type_key: str,
+    expected_subkey: str | None = None,
+    expected_keys: set[str] | None = None,
+) -> dict[str, Any]:
+    """从 context.results 中查找指定步骤类型的结果。
+
+    先按 type_key（步骤类型名，如 "analyze"）直接查找，
+    如果未找到则遍历所有结果，找包含 expected_subkey 或 expected_keys 中任一键的步骤输出。
+
+    这解决了 BUG-5：context 中的 key 是步骤名称（如 "代码分析"），
+    不是步骤类型（如 "analyze"）。
+    """
+    result = results.get(type_key, {})
+    if expected_subkey and isinstance(result, dict) and result.get(expected_subkey):
+        return result
+
+    for _step_name, step_result in results.items():
+        if not isinstance(step_result, dict):
+            continue
+        if expected_subkey and step_result.get(expected_subkey):
+            return step_result
+        if expected_keys and any(k in step_result for k in expected_keys):
+            return step_result
+
+    return result  # 回退原始查找结果
+
+
+async def _get_agent_from_config(step: StepDefinition, db: AsyncSession) -> tuple[str, str | None, str | None]:
+    """从步骤配置中获取 Agent 的 provider、model 和 agent_name。
 
     优先使用 config.agent（已注册的 Agent 名称），否则使用 config.provider。
+    返回 (provider, model, agent_name)。
     """
     agent_name = step.config.get("agent")
     if agent_name and db:
@@ -34,10 +66,10 @@ async def _get_agent_from_config(step: StepDefinition, db: AsyncSession) -> tupl
         ))
         agent_config = result.scalar_one_or_none()
         if agent_config:
-            return agent_config.provider, agent_config.model
+            return agent_config.provider, agent_config.model, agent_config.display_name
 
     # 回退到 config.provider
-    return step.config.get("provider", settings.DEFAULT_AI_PROVIDER), step.config.get("model")
+    return step.config.get("provider", settings.DEFAULT_AI_PROVIDER), step.config.get("model"), None
 
 
 SYSTEM_PROMPT_ANALYZE = """你是一位资深软件工程师。你的任务是分析一个 Issue 或需求，并输出一个结构化的修复方案。
@@ -64,7 +96,7 @@ class AnalyzeHandler(StepHandler):
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
-        provider, model = await _get_agent_from_config(step, db)
+        provider, model, agent_name = await _get_agent_from_config(step, db)
         agent = get_agent(provider, model)
 
         trigger = context.get("trigger_payload", {})
@@ -199,17 +231,14 @@ class ExecuteHandler(StepHandler):
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
-        provider, model = await _get_agent_from_config(step, db)
+        provider, model, agent_name = await _get_agent_from_config(step, db)
         agent = get_agent(provider, model)
 
-        # 从 context 中查找分析结果：优先按步骤名 "analyze" 查找，
+        # 从 context 中查找分析结果：优先按步骤类型名查找，
         # 否则在所有结果中查找含 "analysis" 键的步骤输出（兼容自定义步骤名）
-        analysis = context.get("results", {}).get("analyze", {}).get("analysis", {})
-        if not analysis:
-            for step_name, result in context.get("results", {}).items():
-                if isinstance(result, dict) and "analysis" in result:
-                    analysis = result.get("analysis", {})
-                    break
+        results = context.get("results", {})
+        analyze_result = _find_result_in_context(results, "analyze", expected_subkey="analysis")
+        analysis = analyze_result.get("analysis", {})
 
         code_context = context.get("trigger_payload", {}).get("code_context", "")
 
@@ -325,17 +354,13 @@ class ReviewHandler(StepHandler):
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
     ) -> StepResult:
-        provider, model = await _get_agent_from_config(step, db)
+        provider, model, agent_name = await _get_agent_from_config(step, db)
         agent = get_agent(provider, model)
 
-        # 从 context 中查找执行结果：优先按步骤名 "execute" 查找，
-        # 否则在所有结果中查找含 "changes" 键的步骤输出
-        execute_result = context.get("results", {}).get("execute", {})
-        if not execute_result:
-            for step_name, result in context.get("results", {}).items():
-                if isinstance(result, dict) and "changes" in result:
-                    execute_result = result
-                    break
+        # 从 context 中查找执行结果：优先按步骤类型名查找，
+        # 否则在所有结果中查找含 "changes" 或 "written_files" 键的步骤输出
+        results = context.get("results", {})
+        execute_result = _find_result_in_context(results, "execute", expected_keys={"changes", "written_files"})
         changes = execute_result.get("changes", {})
 
         prompt_template = step.prompt_template or "## 代码改动\n{changes}"
@@ -388,29 +413,15 @@ class MergeHandler(StepHandler):
             owner, repo_name = _parse_repo(git_repo)
             head_branch = context.get("sandbox_branch") or context.get("git_branch")
 
-            analyze_result = context.get("results", {}).get("analyze", {})
+            results = context.get("results", {})
+            analyze_result = _find_result_in_context(results, "analyze", expected_subkey="analysis")
             analysis = analyze_result.get("analysis", {})
-            if not analysis:
-                for _sn, result in context.get("results", {}).items():
-                    if isinstance(result, dict) and "analysis" in result:
-                        analysis = result.get("analysis", {})
-                        break
             issue_title = analysis.get("analysis", "Agent 自动修复")[:80]
 
-            review_result = context.get("results", {}).get("review", {})
-            if not review_result:
-                for _sn, result in context.get("results", {}).items():
-                    if isinstance(result, dict) and "review" in result:
-                        review_result = result
-                        break
+            review_result = _find_result_in_context(results, "review", expected_subkey="review")
             review = review_result.get("review", {})
 
-            execute_result = context.get("results", {}).get("execute", {})
-            if not execute_result:
-                for _sn, result in context.get("results", {}).items():
-                    if isinstance(result, dict) and ("changes" in result or "written_files" in result):
-                        execute_result = result
-                        break
+            execute_result = _find_result_in_context(results, "execute", expected_keys={"changes", "written_files"})
             pr_body = execute_result.get("pr_body", "")
             written_files = execute_result.get("written_files", [])
 
@@ -635,4 +646,183 @@ class LoopHandler(StepHandler):
             status="completed",
             output={"message": f"loop 步骤 '{step.name}' 尚未实现，自动跳过"},
         )
+
+
+@register_handler("handoff")
+class HandoffHandler(StepHandler):
+    """Agent 间通信步骤：将上一步输出转换后传递给下一步。
+
+    YAML config:
+        from_step: 源步骤名称（从 context.results 中读取）
+        to_step: 目标步骤名称（写入 context.results）
+        mapping: 字段映射 {源字段: 目标字段}，为空时透传全部
+        message_type: 消息类型（data/instruction/feedback），默认 data
+    """
+
+    async def execute(
+        self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
+    ) -> StepResult:
+        from_step = step.config.get("from_step")
+        to_step = step.config.get("to_step", step.name)
+        mapping = step.config.get("mapping", {})
+        message_type = step.config.get("message_type", "data")
+
+        results = context.get("results", {})
+
+        # 查找源步骤输出：优先按名称精确匹配，否则取最近一个非 handoff 步骤的输出
+        source_output = results.get(from_step) if from_step else None
+        if not source_output:
+            # 回退：取最近一个步骤的输出
+            for name in reversed(list(results.keys())):
+                if name != step.name and isinstance(results[name], dict):
+                    source_output = results[name]
+                    break
+
+        if not source_output:
+            return StepResult(
+                status="skipped",
+                output={"handoff": None},
+                error=f"未找到源步骤 '{from_step}' 的输出",
+            )
+
+        # 应用字段映射
+        if mapping:
+            mapped_payload = {}
+            for src_key, dst_key in mapping.items():
+                value = source_output
+                for k in src_key.split("."):
+                    if isinstance(value, dict):
+                        value = value.get(k)
+                    else:
+                        value = None
+                        break
+                if value is not None:
+                    mapped_payload[dst_key] = value
+        else:
+            # 无映射时透传全部
+            mapped_payload = source_output if isinstance(source_output, dict) else {"raw": source_output}
+
+        # 构建 HandoffMessage
+        from app.engine.types import HandoffMessage
+        message = HandoffMessage(
+            from_step=from_step or "previous",
+            to_step=to_step,
+            type=message_type,
+            payload=mapped_payload,
+            mapping=mapping,
+        )
+
+        # 将转换后的数据注入 context，供后续步骤使用
+        handoff_output = {
+            "handoff_message": {
+                "from_step": message.from_step,
+                "to_step": message.to_step,
+                "type": message.type,
+                "payload": message.payload,
+            },
+            "transferred_fields": list(mapped_payload.keys()),
+            "field_count": len(mapped_payload),
+        }
+
+        # 同时将映射后的数据合并到 results 中，使后续步骤可直接访问
+        context.setdefault("results", {})[to_step] = mapped_payload
+
+        logger.info(
+            f"Handoff: '{message.from_step}' → '{to_step}'，"
+            f"传递 {len(mapped_payload)} 个字段，类型: {message_type}"
+        )
+
+        return StepResult(
+            status="completed",
+            output=handoff_output,
+        )
+
+
+@register_handler("publish")
+class PublishHandler(StepHandler):
+    """发布步骤：将执行结果发布到外部平台（Confluence 等）。
+
+    YAML config:
+        platform: 目标平台 (confluence)
+        base_url: 平台 URL
+        api_token: API Token
+        space_key: Confluence 空间键
+        title_template: 标题模板（支持 {task_id} 等变量）
+    """
+
+    async def execute(
+        self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
+    ) -> StepResult:
+        platform = step.config.get("platform", "confluence")
+        base_url = step.config.get("base_url")
+        api_token = step.config.get("api_token")
+        space_key = step.config.get("space_key")
+
+        if not all([base_url, api_token, space_key]):
+            return StepResult(
+                status="skipped",
+                output={"published": False},
+                error="发布配置不完整: 缺少 base_url/api_token/space_key",
+            )
+
+        # 生成发布内容
+        task_id = context.get("task_id", "unknown")
+        title_template = step.config.get("title_template", "Agent 执行报告 - {task_id}")
+        title = title_template.format(task_id=task_id, **context.get("trigger_payload", {}))
+
+        # 从 context results 构建内容
+        results = context.get("results", {})
+        content_parts = [f"<h1>{title}</h1>"]
+        for step_name, output in results.items():
+            if isinstance(output, dict):
+                content_parts.append(f"<h2>{step_name}</h2>")
+                content_parts.append(f"<pre>{_truncate(str(output), 5000)}</pre>")
+
+        html_content = "\n".join(content_parts)
+
+        # 发布到 Confluence
+        if platform == "confluence":
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.post(
+                        f"{base_url}/rest/api/content",
+                        json={
+                            "type": "page",
+                            "title": title,
+                            "space": {"key": space_key},
+                            "body": {"storage": {"value": html_content, "representation": "storage"}},
+                        },
+                        headers={
+                            "Authorization": f"Bearer {api_token}",
+                            "Content-Type": "application/json",
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    page_url = f"{base_url}/wiki{data['_links']['webui']}"
+
+                logger.info(f"已发布到 Confluence: {page_url}")
+                return StepResult(
+                    status="completed",
+                    output={"published": True, "platform": platform, "url": page_url, "title": title},
+                )
+            except Exception as e:
+                logger.error(f"Confluence 发布失败: {e}")
+                return StepResult(
+                    status="failed",
+                    output={"published": False, "platform": platform},
+                    error=f"Confluence 发布失败: {e}",
+                )
+
+        return StepResult(
+            status="skipped",
+            output={"published": False},
+            error=f"不支持的发布平台: {platform}",
+        )
+
+
+def _truncate(text: str, max_len: int) -> str:
+    """截断文本到最大长度。"""
+    return text[:max_len] + "…[TRUNCATED]" if len(text) > max_len else text
 

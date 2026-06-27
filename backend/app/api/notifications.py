@@ -1,11 +1,12 @@
 import logging
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import settings
-from app.services.notifier import notifier, build_notification_manager, NotificationManager
+from app.services.notifier import build_notification_manager, notifier
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +40,13 @@ class TestNotificationRequest(BaseModel):
 
 
 class NotificationHistoryItem(BaseModel):
-    timestamp: str
-    level: str
-    message: str
+    id: str
     channel: str
+    event_type: str
+    title: str
+    status: str
+    error_message: str | None = None
+    created_at: str
 
 
 class NotificationHistoryResponse(BaseModel):
@@ -53,12 +57,15 @@ class NotificationHistoryResponse(BaseModel):
 # ---------- 内部工具 ----------
 
 
-def _record_history(level: str, message: str, channel: str) -> None:
+def _record_history(level: str, message: str, channel: str, event_type: str = "test", title: str = "") -> None:
     _notification_history.insert(0, {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "level": level,
-        "message": message,
+        "id": str(uuid.uuid4()),
         "channel": channel,
+        "event_type": event_type,
+        "title": title or message,
+        "status": "success" if level != "error" else "failed",
+        "error_message": message if level == "error" else None,
+        "created_at": datetime.now(UTC).isoformat(),
     })
     if len(_notification_history) > MAX_HISTORY:
         _notification_history.pop()

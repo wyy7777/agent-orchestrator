@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import utcnow, gen_uuid
+from app.models.base import gen_uuid
 
 if TYPE_CHECKING:
     from app.models.task import Task
@@ -27,6 +27,7 @@ class StepExecution(Base):
     input_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     output_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     ai_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    agent_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     token_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     quality_score: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     context_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)

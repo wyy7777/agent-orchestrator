@@ -12,7 +12,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # 插件注册表
-_plugins: dict[str, "StepPlugin"] = {}
+_plugins: dict[str, StepPlugin] = {}
 
 # 外部插件目录
 PLUGIN_DIR = Path(__file__).parent.parent.parent / "plugins"
@@ -87,7 +87,7 @@ def load_external_plugins(plugin_dir: str | Path | None = None):
             logger.error(f"加载外部插件失败 {py_file.name}: {e}")
 
     # 标记外部插件来源
-    for name, plugin in _plugins.items():
+    for _, plugin in _plugins.items():
         if not hasattr(plugin, "_source"):
             plugin._source = "builtin"
 
@@ -205,7 +205,6 @@ class ShellCommandPlugin(StepPlugin):
 
     async def execute(self, config: dict, context: dict) -> dict:
         import asyncio
-        import re as _re
 
         command = config["command"]
         cwd = config.get("cwd")
@@ -234,7 +233,7 @@ class ShellCommandPlugin(StepPlugin):
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             return {"exit_code": -1, "stdout": "", "stderr": "命令超时"}
 

@@ -1,16 +1,18 @@
 import os
-import secrets
-from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     APP_NAME: str = "Agent Orchestrator"
-    APP_VERSION: str = "1.1.0"
+    APP_VERSION: str = "1.2.0"
     DEBUG: bool = False
 
     # 数据库
     DATABASE_URL: str = "sqlite+aiosqlite:///./agent_orchestrator.db"
+
+    # Redis（缓存 / 任务队列）
+    REDIS_URL: str = ""
 
     # AI API
     ANTHROPIC_API_KEY: str = ""
@@ -19,6 +21,10 @@ class Settings(BaseSettings):
     DEFAULT_AI_PROVIDER: str = "deepseek"
     DEFAULT_AI_MODEL: str = "deepseek-chat"
     DEFAULT_MAX_TOKENS: int = 4096
+
+    # Ollama（本地模型）
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    OLLAMA_DEFAULT_MODEL: str = "qwen2.5-coder:7b"
 
     # GitHub
     GITHUB_TOKEN: str = ""

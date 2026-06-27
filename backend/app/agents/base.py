@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from app.config import settings
@@ -12,7 +12,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-class AgentErrorCode(str, Enum):
+class AgentErrorCode(StrEnum):
     """Agent 调用的结构化错误码。"""
     AUTH_FAILED = "auth_failed"
     RATE_LIMITED = "rate_limited"
@@ -219,6 +219,45 @@ class DeepSeekAgent(OpenAIAgent):
         )
 
 
+class OllamaAgent(OpenAIAgent):
+    """Ollama 本地模型 Agent（OpenAI 兼容 API）。"""
+
+    def __init__(self, model: str | None = None, max_tokens: int | None = None):
+        super().__init__(
+            model=model or settings.OLLAMA_DEFAULT_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            max_tokens=max_tokens,
+        )
+        # Ollama 不需要 API Key
+        import openai
+        key = self.base_url or "ollama"
+        if key not in self._clients:
+            self._clients[key] = openai.AsyncOpenAI(
+                api_key="ollama",  # Ollama 忽略 API Key
+                base_url=self.base_url,
+            )
+
+    async def _call_api(self, system_prompt: str, user_prompt: str) -> AgentResponse:
+        client = self._get_client()
+        response = await client.chat.completions.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        content = response.choices[0].message.content or ""
+        tokens_used = response.usage.total_tokens if response.usage else 0
+
+        return AgentResponse(
+            content=content,
+            parsed=_try_parse_json(content),
+            tokens_used=tokens_used,
+            model=self.model,
+        )
+
+
 def get_agent(provider: str | None = None, model: str | None = None, max_tokens: int | None = None) -> BaseAgent:
     provider = provider or settings.DEFAULT_AI_PROVIDER
     if provider == "deepseek":
@@ -227,5 +266,7 @@ def get_agent(provider: str | None = None, model: str | None = None, max_tokens:
         return OpenAIAgent(model=model or "gpt-4o", max_tokens=max_tokens)
     elif provider == "claude":
         return ClaudeAgent(model=model or settings.DEFAULT_AI_MODEL, max_tokens=max_tokens)
+    elif provider == "ollama":
+        return OllamaAgent(model=model, max_tokens=max_tokens)
     else:
         return DeepSeekAgent(model=model or settings.DEFAULT_AI_MODEL, max_tokens=max_tokens)

@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 (SQLAlchemy resolves Mapped[datetime] at runtime)
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
-from app.models.base import utcnow, gen_uuid
+from app.models.base import gen_uuid, utcnow
 
 logger = logging.getLogger(__name__)
 

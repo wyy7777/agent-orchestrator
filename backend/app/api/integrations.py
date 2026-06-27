@@ -2,16 +2,20 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from app.database import get_db
-from app.models.user import User
 from app.auth import require_role
 from app.config import settings
+from app.database import get_db
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -73,15 +77,148 @@ async def sync_jira_issues(
 
 
 @router.post("/jira/webhook")
-async def jira_webhook(body: dict):
-    """Jira Webhook 回调：Issue 更新时触发。"""
-    issue_key = body.get("issue", {}).get("key")
+async def jira_webhook(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Jira Webhook 回调：Issue 创建/更新时自动触发关联工作流。"""
+    issue = body.get("issue", {})
+    issue_key = issue.get("key")
     if not issue_key:
         return {"status": "ignored"}
 
-    logger.info(f"Jira webhook: {issue_key} updated")
-    # TODO: 触发关联工作流
-    return {"status": "received", "issue_key": issue_key}
+    webhook_event = body.get("webhookEvent", "")
+    logger.info(f"Jira webhook: {issue_key} - {webhook_event}")
+
+    # 只处理 Issue 创建和更新事件
+    if webhook_event not in ("jira:issue_created", "jira:issue_updated"):
+        return {"status": "ignored", "reason": "event not handled"}
+
+    # 查找匹配的 workflow（按 project key 或 label 匹配）
+    from app.engine.yaml_parser import parse_workflow_yaml
+    from app.models.task import Task
+    from app.models.workflow import Workflow
+
+    project_key = issue_key.split("-")[0] if "-" in issue_key else ""
+
+    # 查找包含 jira_project 配置的工作流
+    result = await db.execute(select(Workflow))
+    workflows = result.scalars().all()
+
+    matched_workflow = None
+    for wf in workflows:
+        try:
+            wf_def = parse_workflow_yaml(wf.yaml_definition)
+            # 检查工作流 settings 中是否有 jira_project 匹配
+            wf_project = wf_def.settings.get("jira_project", "")
+            if wf_project and wf_project.upper() == project_key.upper():
+                matched_workflow = wf
+                break
+            # 也检查 description 中是否包含 project key
+            if project_key.upper() in (wf.description or "").upper():
+                matched_workflow = wf
+                break
+        except Exception:
+            continue
+
+    if not matched_workflow:
+        logger.info(f"Jira webhook: 未找到匹配 project '{project_key}' 的工作流")
+        return {"status": "received", "issue_key": issue_key, "workflow_triggered": False}
+
+    # 自动创建任务
+    task = Task(
+        workflow_id=matched_workflow.id,
+        trigger_type="webhook",
+        trigger_payload={
+            "source": "jira",
+            "issue_key": issue_key,
+            "issue_summary": issue.get("fields", {}).get("summary", ""),
+            "issue_body": issue.get("fields", {}).get("description", ""),
+            "issue_status": issue.get("fields", {}).get("status", {}).get("name", ""),
+            "event": webhook_event,
+        },
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+
+    logger.info(f"Jira webhook: 已创建任务 {task.id} (工作流: {matched_workflow.name})")
+    return {
+        "status": "received",
+        "issue_key": issue_key,
+        "workflow_triggered": True,
+        "workflow_name": matched_workflow.name,
+        "task_id": task.id,
+    }
+
+
+@router.post("/linear/webhook")
+async def linear_webhook(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Linear Webhook 回调：Issue 创建时自动触发关联工作流。"""
+    action = body.get("action", "")
+    issue_data = body.get("data", {})
+    issue_id = issue_data.get("identifier", "")
+    issue_title = issue_data.get("title", "")
+
+    if not issue_id:
+        return {"status": "ignored"}
+
+    logger.info(f"Linear webhook: {issue_id} - {action}")
+
+    # 只处理 Issue 创建事件
+    if action != "create":
+        return {"status": "received", "issue_id": issue_id, "workflow_triggered": False}
+
+    # 查找匹配的 workflow
+    from app.engine.yaml_parser import parse_workflow_yaml
+    from app.models.task import Task
+    from app.models.workflow import Workflow
+
+    team_key = issue_id.split("-")[0] if "-" in issue_id else ""
+
+    result = await db.execute(select(Workflow))
+    workflows = result.scalars().all()
+
+    matched_workflow = None
+    for wf in workflows:
+        try:
+            wf_def = parse_workflow_yaml(wf.yaml_definition)
+            wf_team = wf_def.settings.get("linear_team", "")
+            if wf_team and wf_team.upper() == team_key.upper():
+                matched_workflow = wf
+                break
+        except Exception:
+            continue
+
+    if not matched_workflow:
+        return {"status": "received", "issue_id": issue_id, "workflow_triggered": False}
+
+    task = Task(
+        workflow_id=matched_workflow.id,
+        trigger_type="webhook",
+        trigger_payload={
+            "source": "linear",
+            "issue_id": issue_id,
+            "issue_summary": issue_title,
+            "issue_body": issue_data.get("description", ""),
+            "event": action,
+        },
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+
+    logger.info(f"Linear webhook: 已创建任务 {task.id} (工作流: {matched_workflow.name})")
+    return {
+        "status": "received",
+        "issue_id": issue_id,
+        "workflow_triggered": True,
+        "workflow_name": matched_workflow.name,
+        "task_id": task.id,
+    }
 
 
 # ── Linear 集成 ──
@@ -138,8 +275,9 @@ async def publish_to_confluence(
         raise HTTPException(status_code=400, detail="Confluence API Token 未配置")
 
     # 获取任务详情
-    from app.models.task import Task
     from sqlalchemy.orm import selectinload
+
+    from app.models.task import Task
     result = await db.execute(
         select(Task).options(selectinload(Task.step_executions)).where(Task.id == task_id)
     )

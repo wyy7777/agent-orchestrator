@@ -2,19 +2,18 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.engine.step_executor import (
     _execute_with_retry,
-    execute_single_step,
     execute_loop_step,
+    execute_single_step,
     execute_subtask_step,
 )
-from app.engine.types import StepHandler, StepStatus
-from app.engine.yaml_parser import StepDefinition, RetryConfig
-
+from app.engine.types import StepHandler
+from app.engine.yaml_parser import RetryConfig, StepDefinition
 
 # ── Retry 逻辑 ──
 

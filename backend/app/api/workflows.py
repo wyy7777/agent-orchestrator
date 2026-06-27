@@ -1,19 +1,23 @@
+import base64
+from datetime import datetime
+from pathlib import Path
+
+import yaml
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import require_role
 from app.database import get_db
-from app.models.workflow import Workflow
+from app.engine.yaml_parser import validate_workflow_yaml
 from app.models.user import User
+from app.models.workflow import Workflow
 from app.schemas.workflow import (
     WorkflowCreate,
     WorkflowListResponse,
     WorkflowResponse,
     WorkflowUpdate,
 )
-from app.engine.yaml_parser import validate_workflow_yaml
-import yaml
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -99,10 +103,6 @@ async def delete_workflow(workflow_id: str, db: AsyncSession = Depends(get_db), 
     await db.delete(workflow)
 
 
-# === 工作流模板 ===
-
-import os
-from pathlib import Path
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
@@ -158,12 +158,6 @@ async def validate_yaml(body: dict):
     valid, error = validate_workflow_yaml(yaml_content)
     return {"valid": valid, "error": error}
 
-
-# === 工作流分享 ===
-
-import base64
-import hashlib
-from datetime import datetime
 
 
 @router.get("/{workflow_id}/share")

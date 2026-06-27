@@ -1,17 +1,44 @@
 import asyncio
+
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.database import Base, get_db
 from app.main import app
 
 # 确保所有模型被导入（用于表创建）
-from app.models import User, Workflow, Task, StepExecution, Approval, ApprovalPolicy, AuditLog, AuditReport, AgentConfig, Webhook  # noqa: F401
+from app.models import (  # noqa: F401
+    AgentConfig,
+    Approval,
+    ApprovalPolicy,
+    AuditLog,
+    AuditReport,
+    StepExecution,
+    Task,
+    User,
+    Webhook,
+    Workflow,
+)
 
 TEST_DB_URL = "sqlite+aiosqlite:///./test.db"
-test_engine = create_async_engine(TEST_DB_URL, echo=False)
+test_engine = create_async_engine(
+    TEST_DB_URL,
+    echo=False,
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 10,  # 10 秒超时，避免后台任务与测试轮询的锁冲突
+    },
+)
+
+# 测试启动时启用 WAL 模式，减少读写锁冲突
+@pytest.fixture(scope="session", autouse=True)
+async def enable_wal():
+    from sqlalchemy import text
+    async with test_engine.connect() as conn:
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.commit()
 test_session = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 

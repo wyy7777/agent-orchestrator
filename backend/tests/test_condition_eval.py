@@ -1,9 +1,7 @@
 """条件评估器边界测试。"""
 from __future__ import annotations
 
-import pytest
-
-from app.engine.condition_eval import evaluate_condition, _evaluate_single
+from app.engine.condition_eval import _evaluate_single, evaluate_condition
 
 
 class TestEvaluateConditionEdgeCases:

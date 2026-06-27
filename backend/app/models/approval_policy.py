@@ -1,16 +1,18 @@
 """审批策略模型：定义何时需要审批以及审批规则。"""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 (SQLAlchemy resolves Mapped[datetime] at runtime)
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, select
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.database import Base
-from app.models.base import utcnow, gen_uuid
 from app.engine.condition_eval import evaluate_condition
+from app.models.base import gen_uuid, utcnow
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class ApprovalPolicy(Base):

@@ -2,15 +2,19 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_admin, require_role
 from app.database import get_db
 from app.models.audit_log import AuditLog
-from app.models.user import User
-from app.auth import require_admin, require_role
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +93,11 @@ async def generate_audit_report(
     import hashlib
     import io
     from datetime import datetime as dt
+
     from fastapi.responses import StreamingResponse
-    from app.models.task import Task
-    from app.models.step_execution import StepExecution
-    from app.models.approval import Approval
     from sqlalchemy.orm import selectinload
+
+    from app.models.task import Task
 
     start_dt = dt.fromisoformat(start_date)
     end_dt = dt.fromisoformat(end_date + "T23:59:59")

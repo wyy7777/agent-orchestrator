@@ -3,21 +3,29 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.engine.condition_eval import evaluate_condition
-from app.engine.step_executor import execute_single_step, execute_subtask_step, execute_loop_step
-from app.engine.types import StepHandler, StepStatus, TaskStatus, _step_handlers, register_handler  # noqa: F401
+from app.engine.step_executor import execute_loop_step, execute_single_step, execute_subtask_step
+from app.engine.types import (  # noqa: F401
+    StepHandler,
+    StepStatus,
+    TaskStatus,
+    _step_handlers,
+    register_handler,
+)
 from app.engine.yaml_parser import StepDefinition, WorkflowDefinition, parse_workflow_yaml
 from app.models.approval import Approval
 from app.models.step_execution import StepExecution
 from app.models.task import Task
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +58,7 @@ class ExecutionEngine:
         for task in orphaned:
             task.status = TaskStatus.FAILED.value
             task.error_message = "进程重启导致任务中断"
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
         if orphaned:
             await self.db.commit()
             logger.warning(f"已恢复 {len(orphaned)} 个孤儿任务")
@@ -90,7 +98,7 @@ class ExecutionEngine:
 
                 owner, repo = _parse_repo(task.git_repo)
                 base_branch = task.git_branch or await get_default_branch(owner, repo)
-                timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+                timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
                 branch_name = f"agent-fix/{timestamp}"
                 await create_branch(owner, repo, branch_name, base_branch)
                 task.sandbox_branch = branch_name
@@ -100,7 +108,7 @@ class ExecutionEngine:
                 logger.warning(f"创建沙箱分支失败: {e}")
 
         task.status = TaskStatus.RUNNING.value
-        task.started_at = datetime.now(timezone.utc)
+        task.started_at = datetime.now(UTC)
         task.current_step_index = 0
         await self.db.commit()
 
@@ -191,15 +199,15 @@ class ExecutionEngine:
                         return
 
                     # 标记组内所有步骤为 running
-                    for step_exec, step_def in group:
+                    for step_exec, _ in group:
                         step_exec.status = StepStatus.RUNNING.value
-                        step_exec.started_at = datetime.now(timezone.utc)
+                        step_exec.started_at = datetime.now(UTC)
                         task.current_step_index = step_exec.step_index
                     await db.commit()
 
                     try:
                         await self._execute_step_group(group, task, context, db, task_id)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         await self._handle_group_failure(
                             group, task, db, task_id, workflow_def.name,
                             error_msg="步骤组超时", timeout=True,
@@ -216,7 +224,7 @@ class ExecutionEngine:
 
                 # 所有步骤完成
                 task.status = TaskStatus.COMPLETED.value
-                task.completed_at = datetime.now(timezone.utc)
+                task.completed_at = datetime.now(UTC)
                 await db.commit()
                 logger.info(f"任务 {task_id} 完成")
                 await self._emit("task_completed", task_id, workflow_def.name)
@@ -234,7 +242,7 @@ class ExecutionEngine:
                     if task and task.status == TaskStatus.RUNNING.value:
                         task.status = TaskStatus.FAILED.value
                         task.error_message = f"执行异常: {e}"
-                        task.completed_at = datetime.now(timezone.utc)
+                        task.completed_at = datetime.now(UTC)
                         await db.commit()
             except Exception as inner_e:
                 logger.error(f"更新失败任务状态异常: {inner_e}")
@@ -293,7 +301,7 @@ class ExecutionEngine:
 
         step_exec.status = StepStatus.SKIPPED.value
         step_exec.output_data = {"skipped": True, "reason": f"条件不满足: {step_def.condition}"}
-        step_exec.completed_at = datetime.now(timezone.utc)
+        step_exec.completed_at = datetime.now(UTC)
         logger.info(f"步骤 '{step_exec.step_name}' 被跳过 (条件不满足: {step_def.condition})")
 
         # 执行 else 分支
@@ -319,7 +327,7 @@ class ExecutionEngine:
                 step_name=f"{step_exec.step_name}.else.{else_step_def.name}",
                 step_type=else_step_def.type,
                 status=StepStatus.RUNNING.value,
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
             )
             db.add(else_exec)
             await db.flush()
@@ -332,7 +340,7 @@ class ExecutionEngine:
             except Exception as e:
                 else_exec.status = StepStatus.FAILED.value
                 else_exec.error_message = str(e)
-                else_exec.completed_at = datetime.now(timezone.utc)
+                else_exec.completed_at = datetime.now(UTC)
                 logger.error(f"else 分支步骤 '{else_step_def.name}' 失败: {e}")
 
     async def _check_approval(
@@ -346,7 +354,7 @@ class ExecutionEngine:
         for step_exec, step_def in group:
             if step_def.type == "approval":
                 step_exec.status = StepStatus.WAITING_APPROVAL.value
-                step_exec.started_at = datetime.now(timezone.utc)
+                step_exec.started_at = datetime.now(UTC)
                 task.status = TaskStatus.PAUSED.value
                 task.current_step_index = step_exec.step_index
 
@@ -373,7 +381,7 @@ class ExecutionEngine:
                 output = await execute_subtask_step(step_def, context, db, self._execute_workflow)
                 step_exec.status = StepStatus.COMPLETED.value
                 step_exec.output_data = output
-                step_exec.completed_at = datetime.now(timezone.utc)
+                step_exec.completed_at = datetime.now(UTC)
                 step_exec.token_usage = {"tokens": 0}
                 context["results"][step_exec.step_name] = output
                 logger.info(f"子任务步骤 '{step_exec.step_name}' 完成")
@@ -382,7 +390,7 @@ class ExecutionEngine:
                 output = await execute_loop_step(step_def, task, context, db, self._emit_step_completed)
                 step_exec.status = StepStatus.COMPLETED.value
                 step_exec.output_data = output
-                step_exec.completed_at = datetime.now(timezone.utc)
+                step_exec.completed_at = datetime.now(UTC)
                 step_exec.token_usage = {"tokens": 0}
                 context["results"][step_exec.step_name] = output
                 logger.info(f"循环步骤 '{step_exec.step_name}' 完成, 迭代 {output.get('iterations', 0)} 次")
@@ -410,10 +418,10 @@ class ExecutionEngine:
             if step_exec.status != StepStatus.COMPLETED.value:
                 step_exec.status = StepStatus.FAILED.value
                 step_exec.error_message = f"步骤超时（>{step_def.timeout}s）" if timeout else error_msg
-                step_exec.completed_at = datetime.now(timezone.utc)
+                step_exec.completed_at = datetime.now(UTC)
         task.status = TaskStatus.FAILED.value
         task.error_message = "步骤组超时" if timeout else f"步骤失败: {error_msg}"
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         await db.commit()
         failed_names = [sd.name for se, sd in group if se.status == StepStatus.FAILED.value]
         label = "超时" if timeout else "失败"

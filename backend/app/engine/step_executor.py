@@ -3,22 +3,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.engine.condition_eval import evaluate_condition
 from app.engine.plugin import get_plugin
-from app.engine.types import StepHandler, StepResult, StepStatus, TaskStatus, _step_handlers
-from app.engine.yaml_parser import StepDefinition, WorkflowDefinition, parse_workflow_yaml
-from app.models.approval import Approval
+from app.engine.types import StepResult, StepStatus, TaskStatus, _step_handlers
+from app.engine.yaml_parser import StepDefinition, parse_workflow_yaml
 from app.models.step_execution import StepExecution
 from app.models.task import Task
 from app.models.workflow import Workflow
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ async def execute_single_step(
     if status in ("skipped", "fallback"):
         step_exec.status = StepStatus.SKIPPED.value
         step_exec.output_data = output
-        step_exec.completed_at = datetime.now(timezone.utc)
+        step_exec.completed_at = datetime.now(UTC)
         context["results"][step_exec.step_name] = output
         return output
 
@@ -121,17 +121,22 @@ async def execute_single_step(
         step_exec.status = StepStatus.FAILED.value
         step_exec.output_data = output
         step_exec.error_message = error
-        step_exec.completed_at = datetime.now(timezone.utc)
+        step_exec.completed_at = datetime.now(UTC)
         raise RuntimeError(error or "步骤执行失败")
 
     step_exec.status = StepStatus.COMPLETED.value
     step_exec.output_data = output
-    step_exec.completed_at = datetime.now(timezone.utc)
+    step_exec.completed_at = datetime.now(UTC)
 
     task.total_tokens_used += tokens
     step_exec.token_usage = {"tokens": tokens}
     if model_name:
         step_exec.ai_model = model_name
+
+    # 记录 Agent 名称（如果步骤指定了 config.agent）
+    agent_name = step_def.config.get("agent")
+    if agent_name:
+        step_exec.agent_name = agent_name
 
     context["results"][step_exec.step_name] = output
 
@@ -215,7 +220,7 @@ async def execute_subtask_step(
         )
 
     child_task.status = TaskStatus.RUNNING.value
-    child_task.started_at = datetime.now(timezone.utc)
+    child_task.started_at = datetime.now(UTC)
     child_task.current_step_index = 0
     await db.commit()
 
@@ -294,7 +299,7 @@ async def execute_loop_step(
                 step_name=f"{step_def.name}[{idx}].{sub_def.name}",
                 step_type=sub_def.type,
                 status=StepStatus.RUNNING.value,
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
             )
             db.add(sub_step_exec)
             await db.flush()
@@ -304,14 +309,15 @@ async def execute_loop_step(
                     sub_step_exec, sub_def, task, iteration_context, db, on_step_complete
                 )
                 context["results"][sub_step_exec.step_name] = output
-            except (asyncio.TimeoutError, Exception) as e:
+            except (TimeoutError, Exception) as e:
                 sub_step_exec.status = StepStatus.FAILED.value
                 sub_step_exec.error_message = str(e)
-                sub_step_exec.completed_at = datetime.now(timezone.utc)
+                sub_step_exec.completed_at = datetime.now(UTC)
                 raise
 
         loop_results.append(
-            iteration_context.get("results", {}).get(f"{step_def.name}[{idx}]")
+            {sub_def.name: iteration_context.get("results", {}).get(f"{step_def.name}[{idx}].{sub_def.name}")
+             for sub_def in sub_step_defs}
         )
 
     return {

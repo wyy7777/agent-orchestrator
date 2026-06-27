@@ -1,8 +1,9 @@
 """Agent 输出的 Pydantic 校验模型。"""
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
 from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class FileChange(BaseModel):

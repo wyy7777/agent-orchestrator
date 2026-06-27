@@ -1,16 +1,17 @@
 """GitLab 集成单元测试。"""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.integrations.gitlab import (
     _parse_repo,
     _validate_file_path,
-    get_project,
-    get_default_branch,
     create_branch,
     create_file,
     create_merge_request,
+    get_default_branch,
+    get_project,
 )
 
 

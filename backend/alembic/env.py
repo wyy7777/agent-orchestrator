@@ -3,16 +3,17 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # 确保当前目录在 sys.path 中，以便导入 app 模块
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.database import Base
 # 导入所有模型，使 Alembic 能检测到所有表
 import app.models  # noqa: F401
+from app.database import Base
 
 config = context.config
 

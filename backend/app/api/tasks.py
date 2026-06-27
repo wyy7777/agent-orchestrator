@@ -1,17 +1,17 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth import require_role
 from app.database import get_db
+from app.engine.state_machine import ExecutionEngine
 from app.models.task import Task
 from app.models.user import User
 from app.models.workflow import Workflow
-from app.auth import require_role
 from app.schemas.task import TaskCreate, TaskListResponse, TaskResponse
-from app.engine.state_machine import ExecutionEngine
 from app.services.ws_manager import ws_manager
 
 
@@ -81,7 +81,7 @@ async def list_tasks(
     if sort_order not in ("asc", "desc"):
         raise HTTPException(status_code=400, detail="排序方向只能是 asc 或 desc")
 
-    filter_kwargs = dict(q=q, status=status, workflow_id=workflow_id, date_from=date_from, date_to=date_to)
+    filter_kwargs = {"q": q, "status": status, "workflow_id": workflow_id, "date_from": date_from, "date_to": date_to}
 
     # 计数查询
     count_query = select(func.count(Task.id))
@@ -114,6 +114,32 @@ async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db), _use
     workflow = wf_result.scalar_one_or_none()
     if not workflow:
         raise HTTPException(status_code=404, detail="工作流不存在")
+
+    # 验证步骤 Agent 能力匹配
+    from app.engine.yaml_parser import parse_workflow_yaml
+    from app.models.agent_config import AgentConfig
+    try:
+        workflow_def = parse_workflow_yaml(workflow.yaml_definition)
+        for step_def in workflow_def.steps:
+            agent_name = step_def.config.get("agent")
+            if agent_name:
+                agent_result = await db.execute(
+                    select(AgentConfig).where(AgentConfig.name == agent_name)
+                )
+                agent = agent_result.scalar_one_or_none()
+                if not agent:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"步骤 '{step_def.name}' 指定的 Agent '{agent_name}' 不存在",
+                    )
+                if not agent.matches_step_type(step_def.type):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Agent '{agent.display_name}' 不支持步骤类型 '{step_def.type}'，"
+                               f"其能力为: {agent.capabilities or '通用'}",
+                    )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"工作流 YAML 解析失败: {e}")
 
     task = Task(
         workflow_id=body.workflow_id,
@@ -227,8 +253,8 @@ async def replay_step(
     }
 
     # 创建新的 StepExecution 记录用于重放结果
-    from app.models.step_execution import StepExecution as StepExecModel
     from app.engine.step_executor import execute_single_step
+    from app.models.step_execution import StepExecution as StepExecModel
 
     replay_exec = StepExecModel(
         task_id=task_id,

@@ -2,16 +2,18 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.task import Task
 from app.models.step_execution import StepExecution
+from app.models.task import Task
 from app.models.workflow import Workflow
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["metrics"])
 

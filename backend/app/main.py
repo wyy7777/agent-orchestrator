@@ -1,37 +1,48 @@
 import asyncio
+import contextlib
 import logging
-import uuid
 import time
-from pathlib import Path
 from collections import defaultdict
-from ipaddress import ip_address, ip_network
-
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from ipaddress import ip_address, ip_network
+from pathlib import Path
 
-from app.config import settings
-from app.database import init_db
-from app.logging_config import setup_logging
-from app.api import workflows, tasks, approvals, dashboard, webhooks, schedules, notifications, plugins
-from app.api import sandboxes
-from app.api import audit
-from app.api.agents import router as agents_router
-from app.api.approval_policies import router as approval_policies_router
-from app.api.integrations import router as integrations_router
-from app.api.metrics import router as metrics_router
-from app.api.plugin_marketplace import router as plugin_marketplace_router
-from app.api.auth import router as auth_router
-from app.services.ws_manager import ws_manager
-from app.services.scheduler import scheduler
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # 确保 agent handlers 被注册
 import app.agents.executor  # noqa: F401
+
 # 确保 User 模型被注册到 Base.metadata
 import app.models.user  # noqa: F401
+from app.api import (
+    approvals,
+    audit,
+    dashboard,
+    notifications,
+    plugins,
+    sandboxes,
+    schedules,
+    tasks,
+    webhooks,
+    workflows,
+)
+from app.api.agents import router as agents_router
+from app.api.approval_policies import router as approval_policies_router
+from app.api.auth import router as auth_router
+from app.api.integrations import router as integrations_router
+from app.api.metrics import router as metrics_router
+from app.api.plugin_marketplace import router as plugin_marketplace_router
+from app.api.settings import router as settings_router
+from app.config import settings
+from app.database import init_db
+from app.logging_config import setup_logging
+from app.services.scheduler import scheduler
+from app.services.ws_manager import ws_manager
+from app.telemetry import instrument_fastapi, instrument_httpx, setup_opentelemetry
 
 # 配置日志（控制台 + 文件旋转）
 setup_logging(log_level="DEBUG" if settings.DEBUG else "INFO")
@@ -42,10 +53,11 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 
 async def _create_demo_data():
     """Demo 模式：创建示例工作流。"""
+    from sqlalchemy import func, select
+
+    from app.api.workflows import _load_templates
     from app.database import async_session
     from app.models.workflow import Workflow
-    from app.api.workflows import _load_templates
-    from sqlalchemy import select, func
 
     async with async_session() as db:
         count = (await db.execute(select(func.count(Workflow.id)))).scalar() or 0
@@ -81,6 +93,12 @@ async def _engine_event_handler(event: str, *args):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 初始化 OpenTelemetry
+    otel_enabled = setup_opentelemetry()
+    if otel_enabled:
+        instrument_fastapi(app)
+        instrument_httpx()
+
     # 确保 SECRET_KEY 已配置
     from app.auth import ensure_secret_key
     ensure_secret_key()
@@ -128,10 +146,8 @@ async def lifespan(app: FastAPI):
     # 停止速率限制器清理任务
     if _cleanup_task:
         _cleanup_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await _cleanup_task
-        except asyncio.CancelledError:
-            pass
 
     scheduler.stop_scheduler()
 
@@ -160,6 +176,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(settings_router)
 app.include_router(workflows.router)
 app.include_router(tasks.router)
 app.include_router(approvals.router)
@@ -228,7 +245,7 @@ async def timing_middleware(request: Request, call_next):
     duration_ms = (time.perf_counter() - start) * 1000
     # 只记录 API 请求，跳过静态文件
     if request.url.path.startswith("/api/"):
-        logger.info(
+        logger.debug(
             f"{request.method} {request.url.path} → {response.status_code} ({duration_ms:.1f}ms)"
         )
     response.headers["X-Response-Time"] = f"{duration_ms:.1f}ms"
@@ -294,7 +311,17 @@ async def rate_limit_middleware(request: Request, call_next):
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, task_id: str | None = None):
+async def websocket_endpoint(websocket: WebSocket, task_id: str | None = None, token: str | None = None):
+    # WebSocket 认证：通过查询参数 token 传递 JWT
+    from app.auth import verify_ws_token
+    from app.database import async_session
+
+    async with async_session() as db:
+        user = await verify_ws_token(token, db)
+        if not user:
+            await websocket.close(code=4001, reason="认证失败")
+            return
+
     await ws_manager.connect(websocket, task_id)
     try:
         while True:
@@ -310,9 +337,30 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str | None = None):
 
 @app.get("/api/health")
 async def health():
+    """健康检查：返回服务状态及数据库连接状态。"""
+    db_ok = False
+    db_latency_ms = None
+    try:
+        import time
+
+        from app.database import async_session
+        t0 = time.perf_counter()
+        async with async_session() as db:
+            from sqlalchemy import text
+            await db.execute(text("SELECT 1"))
+            await db.commit()
+        db_latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        db_ok = True
+    except Exception as e:
+        logger.warning(f"健康检查：数据库连接失败: {e}")
+
     return {
-        "status": "ok",
+        "status": "ok" if db_ok else "degraded",
         "version": settings.APP_VERSION,
+        "database": {
+            "connected": db_ok,
+            "latency_ms": db_latency_ms,
+        },
     }
 
 

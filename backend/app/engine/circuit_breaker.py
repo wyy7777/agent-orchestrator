@@ -24,6 +24,7 @@ class CircuitBreaker:
         """启动时从数据库恢复断路器状态。"""
         try:
             from sqlalchemy import select
+
             from app.models.circuit_breaker import CircuitBreakerState
 
             result = await db.execute(select(CircuitBreakerState))
@@ -131,6 +132,7 @@ class CircuitBreaker:
         """将当前状态持久化到数据库。"""
         try:
             from sqlalchemy import select
+
             from app.models.circuit_breaker import CircuitBreakerState
 
             result = await db.execute(

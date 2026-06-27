@@ -1,11 +1,11 @@
 """审计日志模型。"""
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import DateTime, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
-from app.models.base import utcnow, gen_uuid
+from app.models.base import gen_uuid, utcnow
 
 
 class AuditLog(Base):

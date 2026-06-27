@@ -51,12 +51,33 @@ def evaluate_condition(condition: str, context: dict[str, Any]) -> bool:
 
     expr = re.sub(r"\{([^}]+)\}", resolve_var, condition)
 
-    # 处理复合条件 (and/or)
+    # 处理复合条件 (and/or)，仅在引号外层分割
+    def _split_outside_quotes(text: str, sep: str) -> list[str]:
+        """仅在引号外部分隔符处分割字符串。"""
+        parts = []
+        current = []
+        in_quote = False
+        i = 0
+        while i < len(text):
+            if text[i] == '"':
+                in_quote = not in_quote
+                current.append(text[i])
+            elif not in_quote and text[i:i + len(sep)] == sep:
+                parts.append("".join(current))
+                current = []
+                i += len(sep)
+                continue
+            else:
+                current.append(text[i])
+            i += 1
+        parts.append("".join(current))
+        return parts
+
     if " and " in expr:
-        parts = expr.split(" and ")
+        parts = _split_outside_quotes(expr, " and ")
         return all(_evaluate_single(p.strip()) for p in parts)
     if " or " in expr:
-        parts = expr.split(" or ")
+        parts = _split_outside_quotes(expr, " or ")
         return any(_evaluate_single(p.strip()) for p in parts)
 
     return _evaluate_single(expr)

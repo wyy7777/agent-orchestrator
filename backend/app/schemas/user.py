@@ -1,11 +1,12 @@
-from pydantic import BaseModel
 from datetime import datetime
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserCreate(BaseModel):
-    username: str
-    email: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_]+$")
+    email: EmailStr
+    password: str = Field(..., min_length=4, max_length=128)
 
 
 class UserLogin(BaseModel):
@@ -15,8 +16,8 @@ class UserLogin(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    email: str | None = None
-    password: str | None = None
+    email: EmailStr | None = None
+    password: str | None = Field(None, min_length=4, max_length=128)
 
 
 class UserResponse(BaseModel):

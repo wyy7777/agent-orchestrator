@@ -2,7 +2,7 @@
 
 将此文件放入 plugins/ 目录即可自动加载。
 """
-from app.engine.plugin import StepPlugin, register_plugin, _deep_get
+from app.engine.plugin import StepPlugin, _deep_get, register_plugin
 
 
 @register_plugin("json_validate")

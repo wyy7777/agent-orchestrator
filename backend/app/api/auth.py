@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Query, status
-from sqlalchemy import select, func
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
@@ -11,6 +12,9 @@ from app.auth import (
     create_access_token,
     create_refresh_token,
     get_current_user,
+    get_oauth2_authorize_url,
+    get_oauth2_available_providers,
+    handle_oauth2_callback,
     hash_password,
     record_login_failure,
     require_admin,
@@ -74,7 +78,7 @@ async def login(body: UserLogin, request: Request, db: AsyncSession = Depends(ge
     # 登录成功，清除失败记录
     clear_login_failures(client_ip)
 
-    user.last_login = datetime.now(timezone.utc)
+    user.last_login = datetime.now(UTC)
 
     # 根据 remember_me 设置 token 有效期
     if body.remember_me:
@@ -96,11 +100,12 @@ async def login(body: UserLogin, request: Request, db: AsyncSession = Depends(ge
 
 @router.post("/api/auth/refresh", response_model=Token)
 async def refresh_token(
-    refresh_token: str,
+    refresh_token: str = Body(..., embed=True),
     db: AsyncSession = Depends(get_db),
 ):
     """使用 refresh token 获取新的 access token。"""
     from jose import JWTError, jwt
+
     from app.config import settings
 
     try:
@@ -180,15 +185,6 @@ async def set_admin(
     await db.refresh(user)
     return user
 
-
-# ── OAuth2 / SSO ──
-
-from fastapi.responses import RedirectResponse
-from app.auth import (
-    get_oauth2_available_providers,
-    get_oauth2_authorize_url,
-    handle_oauth2_callback,
-)
 
 
 @router.get("/oauth2/providers")

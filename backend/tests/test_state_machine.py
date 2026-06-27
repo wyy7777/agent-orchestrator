@@ -1,12 +1,11 @@
 """状态机单元测试。"""
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.engine.condition_eval import evaluate_condition
 from app.engine.state_machine import (
     ExecutionEngine,
     StepHandler,
@@ -15,9 +14,7 @@ from app.engine.state_machine import (
     _step_handlers,
     register_handler,
 )
-from app.engine.condition_eval import evaluate_condition
-from app.engine.yaml_parser import StepDefinition, WorkflowDefinition
-
+from app.engine.yaml_parser import StepDefinition
 
 # ---------- 测试 register_handler ----------
 

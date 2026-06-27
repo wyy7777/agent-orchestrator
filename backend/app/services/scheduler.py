@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from croniter import croniter
 
@@ -18,7 +18,7 @@ class Schedule:
     cron_expr: str
     payload: dict
     enabled: bool = True
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_triggered_at: datetime | None = None
 
 
@@ -35,6 +35,7 @@ class WorkflowScheduler:
         """启动时从数据库加载所有启用的调度。"""
         try:
             from sqlalchemy import select
+
             from app.models.schedule import ScheduleModel
 
             result = await db.execute(select(ScheduleModel))
@@ -130,7 +131,7 @@ class WorkflowScheduler:
     async def _run_loop(self):
         """主调度循环：每 30 秒检查一次是否有任务需要触发。"""
         while self._running:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for schedule in list(self._schedules.values()):
                 if not schedule.enabled:
                     continue
@@ -152,14 +153,14 @@ class WorkflowScheduler:
     async def _trigger_schedule(self, schedule: Schedule):
         """触发一次调度：创建任务并启动执行。"""
         from app.database import async_session
-        from app.models.task import Task
         from app.engine.state_machine import ExecutionEngine
         from app.main import _engine_event_handler
+        from app.models.task import Task
 
         logger.info(
             f"触发调度 {schedule.id}: workflow={schedule.workflow_id}"
         )
-        schedule.last_triggered_at = datetime.now(timezone.utc)
+        schedule.last_triggered_at = datetime.now(UTC)
 
         try:
             async with async_session() as db:
@@ -204,6 +205,7 @@ class WorkflowScheduler:
         """从 DB 删除调度。"""
         try:
             from sqlalchemy import select
+
             from app.models.schedule import ScheduleModel
 
             result = await db.execute(
@@ -220,6 +222,7 @@ class WorkflowScheduler:
         """更新 DB 中的调度启用状态。"""
         try:
             from sqlalchemy import select
+
             from app.models.schedule import ScheduleModel
 
             result = await db.execute(
@@ -236,6 +239,7 @@ class WorkflowScheduler:
         """更新 DB 中的最后触发时间。"""
         try:
             from sqlalchemy import select
+
             from app.models.schedule import ScheduleModel
 
             result = await db.execute(

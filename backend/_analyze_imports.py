@@ -1,4 +1,4 @@
-import ast, sys
+import ast
 from pathlib import Path
 
 root = Path(__file__).parent / "app"

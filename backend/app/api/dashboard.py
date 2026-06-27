@@ -1,21 +1,21 @@
 import csv
 import io
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import require_role
 from app.database import get_db
 from app.models.approval import Approval
 from app.models.task import Task
 from app.models.user import User
 from app.models.workflow import Workflow
-from app.auth import require_role
 from app.schemas.dashboard import (
-    DashboardStats,
     DailyTrend,
+    DashboardStats,
     ErrorSummary,
     TopWorkflow,
     TrendsResponse,
@@ -80,7 +80,7 @@ async def get_dashboard_trends(
     db: AsyncSession = Depends(get_db),
 ):
     """趋势数据：每日任务数、成功率、Token 消耗、平均执行时间"""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_date = now - timedelta(days=days - 1)
     start_str = start_date.strftime("%Y-%m-%d")
 
@@ -221,7 +221,7 @@ async def export_dashboard_data(
     _user: User = Depends(require_role("admin", "manager", "operator")),
 ):
     """导出数据为 CSV（支持 tasks / executions）"""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_date = now - timedelta(days=days)
 
     if type == "tasks":
@@ -325,7 +325,7 @@ async def quality_trends(
     """返回近 N 天的质量评分趋势（按日聚合）。"""
     from app.models.step_execution import StepExecution
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start_date = now - timedelta(days=days)
 
     result = await db.execute(

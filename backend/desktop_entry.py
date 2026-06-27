@@ -17,7 +17,7 @@ if getattr(sys, 'frozen', False):
     # 如果有 .env 文件，重写 DATABASE_URL 到可写目录
     env_path = os.path.join(base_dir, ".env")
     if os.path.exists(env_path):
-        with open(env_path, "r", encoding="utf-8") as f:
+        with open(env_path, encoding="utf-8") as f:
             env_content = f.read()
         env_content = env_content.replace(
             "sqlite+aiosqlite:///./agent_orchestrator.db",
@@ -36,7 +36,7 @@ else:
 import uvicorn
 
 HOST = "127.0.0.1"
-PORT = 18000
+PORT = int(os.environ.get("AGENT_ORCH_PORT", "18000"))
 
 print(f"Agent Orchestrator 后端启动: http://{HOST}:{PORT}", flush=True)
 

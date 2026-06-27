@@ -1,9 +1,6 @@
 import asyncio
 import logging
-import os
-import subprocess
 import tempfile
-import uuid
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -132,7 +129,7 @@ class SandboxManager:
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(), timeout=timeout
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 return {"exit_code": -1, "output": f"命令执行超时 (>{timeout}s)"}
 

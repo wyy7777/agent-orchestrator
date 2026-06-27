@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import utcnow, gen_uuid
+from app.models.base import gen_uuid, utcnow
 
 if TYPE_CHECKING:
     from app.models.step_execution import StepExecution

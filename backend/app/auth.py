@@ -1,11 +1,11 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
 import logging
 import secrets
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, APIKeyHeader
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +52,7 @@ def _verify_password_sync(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """创建 JWT access token。"""
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(UTC) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
@@ -60,7 +60,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 def create_refresh_token(data: dict) -> str:
     """创建 refresh token（有效期 30 天）。"""
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(days=30)
+    expire = datetime.now(UTC) + timedelta(days=30)
     to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
 
@@ -76,10 +76,7 @@ def check_login_rate_limit(ip: str) -> bool:
     # 清理过期记录
     _login_failures[ip] = [t for t in _login_failures[ip] if now - t < LOCKOUT_SECONDS]
 
-    if len(_login_failures[ip]) >= MAX_LOGIN_FAILURES:
-        return False
-
-    return True
+    return not len(_login_failures[ip]) >= MAX_LOGIN_FAILURES
 
 
 def record_login_failure(ip: str):
@@ -186,7 +183,7 @@ def ensure_secret_key():
     """确保 SECRET_KEY 已配置。未配置时自动生成并保存到 .env。"""
     if not settings.SECRET_KEY:
         new_key = secrets.token_hex(32)
-        logger.warning(f"SECRET_KEY 未配置，已自动生成: {new_key[:8]}...")
+        logger.warning("SECRET_KEY 未配置，已自动生成（请勿泄露）")
         # 尝试写入 .env 文件
         try:
             from pathlib import Path
@@ -201,6 +198,35 @@ def ensure_secret_key():
             logger.warning(f"无法保存 SECRET_KEY 到 .env: {e}")
         # 更新 settings
         settings.SECRET_KEY = new_key
+
+
+async def verify_ws_token(token: str | None, db: AsyncSession) -> User | None:
+    """验证 WebSocket 连接的 JWT token。
+
+    用于 WebSocket 端点认证：WebSocket 握手不支持自定义 HTTP header，
+    所以 token 通过查询参数传递（如 ?token=xxx）。
+
+    返回:
+        User 对象（验证成功），或 None（单用户模式或无 token）。
+    """
+    if token:
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            user_id: str | None = payload.get("sub")
+            if user_id:
+                result = await db.execute(select(User).where(User.id == user_id))
+                user = result.scalar_one_or_none()
+                if user and user.is_active:
+                    return user
+        except JWTError:
+            logger.warning("WebSocket token 验证失败")
+
+    # 单用户模式：返回默认用户
+    result = await db.execute(select(User).limit(1))
+    user = result.scalar_one_or_none()
+    if user and user.is_active:
+        return user
+    return None
 
 
 # ── OAuth2 / SSO ──
@@ -245,8 +271,8 @@ _OAUTH2_STATE_TTL = 600  # 10 分钟
 
 
 def get_oauth2_authorize_url(provider: str, state: str = "") -> str:
-    import urllib.parse
     import time as _time
+    import urllib.parse
     info = OAUTH2_PROVIDERS.get(provider)
     if not info:
         raise ValueError(f"未知的 OAuth2 provider: {provider}")
@@ -273,8 +299,9 @@ def get_oauth2_authorize_url(provider: str, state: str = "") -> str:
 
 
 async def handle_oauth2_callback(provider: str, code: str, db: AsyncSession, state: str = "") -> str:
-    import httpx
     import time as _time
+
+    import httpx
     info = OAUTH2_PROVIDERS.get(provider)
     if not info:
         raise ValueError(f"未知的 OAuth2 provider: {provider}")

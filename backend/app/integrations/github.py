@@ -4,7 +4,6 @@ import asyncio
 import base64
 import logging
 import re
-from typing import Any
 
 import httpx
 

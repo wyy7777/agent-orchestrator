@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.yaml_parser import StepDefinition
+    from app.engine.yaml_parser import StepDefinition
 
 
 @dataclass
@@ -20,7 +21,17 @@ class StepResult:
     model: str = ""
 
 
-class TaskStatus(str, Enum):
+@dataclass
+class HandoffMessage:
+    """Agent 间通信消息。"""
+    from_step: str
+    to_step: str
+    type: str = "data"  # data | instruction | feedback
+    payload: dict[str, Any] = field(default_factory=dict)
+    mapping: dict[str, str] = field(default_factory=dict)  # 源字段 -> 目标字段映射
+
+
+class TaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     PAUSED = "paused"
@@ -29,7 +40,7 @@ class TaskStatus(str, Enum):
     ROLLED_BACK = "rolled_back"
 
 
-class StepStatus(str, Enum):
+class StepStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     WAITING_APPROVAL = "waiting_approval"
@@ -39,7 +50,7 @@ class StepStatus(str, Enum):
 
 
 # 步骤处理器注册表
-_step_handlers: dict[str, type["StepHandler"]] = {}
+_step_handlers: dict[str, type[StepHandler]] = {}
 
 
 class StepHandler:
@@ -47,7 +58,7 @@ class StepHandler:
 
     async def execute(
         self, step: StepDefinition, context: dict[str, Any], db: AsyncSession
-    ) -> "StepResult":
+    ) -> StepResult:
         raise NotImplementedError
 
 
