@@ -1,0 +1,26 @@
+{
+  "name": "Agent Orchestrator",
+  "short_name": "AgentOrch",
+  "description": "企业级 AI Agent 工作流编排平台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1677ff",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["developer-tools", "productivity"],
+  "lang": "zh-CN",
+  "orientation": "any"
+}

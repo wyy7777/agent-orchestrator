@@ -1,0 +1,90 @@
+# 多 Agent 协作流水线模板
+# 模拟 analyst → developer → reviewer 三人协作流程
+
+name: 多Agent协作流水线
+description: |
+  分析师分析需求 → handoff 传递方案 → 开发者生成代码 → handoff 传递改动 → 审查员审查代码。
+  展示 Agent 间通过 handoff 步骤进行数据传递的协作模式。
+
+settings:
+  max_tokens: 8000
+  timeout: 900
+
+steps:
+  - name: 需求分析
+    type: analyze
+    timeout: 180
+    config:
+      agent: code-analyst  # 可选：指定已注册的 Agent
+      provider: deepseek
+      model: deepseek-chat
+    prompt_template: |
+      作为分析师，请分析以下需求并输出修复方案。
+      需求: {issue}
+      代码: {code}
+
+  - name: 方案传递
+    type: handoff
+    config:
+      from_step: 需求分析
+      to_step: 开发方案
+      mapping:
+        analysis.solution: solution
+        analysis.files_to_modify: target_files
+        analysis.risk_assessment: risk
+      message_type: data
+
+  - name: 代码实现
+    type: execute
+    timeout: 300
+    config:
+      provider: deepseek
+      model: deepseek-chat
+    prompt_template: |
+      作为开发者，请根据以下方案生成代码改动。
+      方案: {solution}
+      目标文件: {target_files}
+      风险评估: {risk}
+
+  - name: 改动传递
+    type: handoff
+    config:
+      from_step: 代码实现
+      to_step: 代码改动
+      mapping:
+        changes: diff_changes
+        written_files: modified_files
+      message_type: data
+
+  - name: 代码审查
+    type: review
+    timeout: 180
+    config:
+      provider: deepseek
+      model: deepseek-chat
+    prompt_template: |
+      作为审查员，请审查以下代码改动。
+      改动: {diff_changes}
+      修改的文件: {modified_files}
+
+  - name: 审查结果传递
+    type: handoff
+    config:
+      from_step: 代码审查
+      to_step: 审查结论
+      mapping:
+        review.verdict: verdict
+        review.score: score
+        review.summary: summary
+      message_type: feedback
+
+  - name: 条件判断
+    type: condition
+    condition: "{trigger_payload.auto_merge} > 0"
+
+  - name: 自动合并
+    type: merge
+    timeout: 120
+    config:
+      provider: deepseek
+      model: deepseek-chat

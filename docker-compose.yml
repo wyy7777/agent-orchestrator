@@ -1,0 +1,143 @@
+# =============================================================================
+# Agent Orchestrator — Docker Compose 部署配置
+#
+# 一键启动（生产模式）：
+#   docker compose up -d
+#
+# 查看日志：
+#   docker compose logs -f
+#
+# 停止：
+#   docker compose down
+#
+# 停止并删除数据卷：
+#   docker compose down -v
+# =============================================================================
+
+services:
+  # ── PostgreSQL 数据库 ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: agent-orch-postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: agent_orchestrator
+      POSTGRES_USER: ${PG_USER:-agentorch}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-agentorch_secret}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-agentorch} -d agent_orchestrator"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - agent-orch-net
+    ports:
+      - "5432:5432"
+
+  # ── Redis 缓存与任务队列 ──
+  redis:
+    image: redis:7-alpine
+    container_name: agent-orch-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-orch-net
+    ports:
+      - "6379:6379"
+
+  # ── 后端 API 服务 ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agent-orch-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 数据库 — 切换到 PostgreSQL
+      DATABASE_URL: postgresql+asyncpg://${PG_USER:-agentorch}:${PG_PASSWORD:-agentorch_secret}@postgres:5432/agent_orchestrator
+
+      # Redis（用于缓存和未来任务队列）
+      REDIS_URL: redis://redis:6379/0
+
+      # 应用配置
+      DEBUG: "${DEBUG:-false}"
+      SECRET_KEY: "${SECRET_KEY:-}"
+      API_KEY: "${API_KEY:-}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-*}"
+
+      # AI API 密钥
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.deepseek.com}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      DEFAULT_AI_PROVIDER: "${DEFAULT_AI_PROVIDER:-deepseek}"
+      DEFAULT_AI_MODEL: "${DEFAULT_AI_MODEL:-deepseek-chat}"
+
+      # GitHub 集成
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      GITHUB_WEBHOOK_SECRET: "${GITHUB_WEBHOOK_SECRET:-}"
+
+      # 通知
+      SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL:-}"
+      DINGTALK_WEBHOOK_URL: "${DINGTALK_WEBHOOK_URL:-}"
+      WECHAT_WORK_WEBHOOK_URL: "${WECHAT_WORK_WEBHOOK_URL:-}"
+      FEISHU_WEBHOOK_URL: "${FEISHU_WEBHOOK_URL:-}"
+
+      # SSO / OAuth2
+      OAUTH2_ENABLED: "${OAUTH2_ENABLED:-false}"
+      OAUTH2_GITHUB_CLIENT_ID: "${OAUTH2_GITHUB_CLIENT_ID:-}"
+      OAUTH2_GITHUB_CLIENT_SECRET: "${OAUTH2_GITHUB_CLIENT_SECRET:-}"
+      OAUTH2_GOOGLE_CLIENT_ID: "${OAUTH2_GOOGLE_CLIENT_ID:-}"
+      OAUTH2_GOOGLE_CLIENT_SECRET: "${OAUTH2_GOOGLE_CLIENT_SECRET:-}"
+      OAUTH2_REDIRECT_BASE: "${OAUTH2_REDIRECT_BASE:-http://localhost:8000}"
+
+      # 数据安全
+      DATA_RETENTION_DAYS: "${DATA_RETENTION_DAYS:-90}"
+      ALLOWED_IPS: "${ALLOWED_IPS:-}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-}"
+
+      # 执行引擎
+      MAX_TOKENS_PER_TASK: "${MAX_TOKENS_PER_TASK:-500000}"
+      TASK_TIMEOUT_SECONDS: "${TASK_TIMEOUT_SECONDS:-1800}"
+      STEP_TIMEOUT_SECONDS: "${STEP_TIMEOUT_SECONDS:-300}"
+
+      # 速率限制
+      RATE_LIMIT: "${RATE_LIMIT:-120}"
+      RATE_WINDOW: "${RATE_WINDOW:-60}"
+
+      # 服务器
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    volumes:
+      - backend_logs:/app/logs
+    networks:
+      - agent-orch-net
+    ports:
+      - "8000:8000"
+
+# ── 数据卷 ──
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_logs:
+    driver: local
+
+# ── 网络 ──
+networks:
+  agent-orch-net:
+    driver: bridge
