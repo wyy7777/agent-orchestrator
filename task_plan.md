@@ -456,10 +456,10 @@ npm run tauri build
 
 ### 2d.1 多 Agent 架构
 
-- [ ] `Agent` 模型：`{name, display_name, capabilities[], provider, model, api_key_ref, max_tokens, timeout}`
-- [ ] Agent CRUD API + 前端管理页面
-- [ ] 步骤 YAML 支持 `config.agent: "code-reviewer"`（优先级高于 `config.provider`）
-- [ ] 步骤创建时校验 Agent 能力是否匹配步骤类型
+- [x] `AgentConfig` 模型：`{name, display_name, capabilities[], provider, model, api_key_ref, max_tokens, timeout}`
+- [x] Agent CRUD API + 前端管理页面
+- [x] 步骤 YAML 支持 `config.agent: "code-reviewer"`（优先级高于 `config.provider`）
+- [x] 步骤创建时校验 Agent 能力是否匹配步骤类型
 
 **验收方式** 🟢
 
@@ -489,9 +489,9 @@ curl -s http://localhost:8000/api/tasks/{id} | jq '.step_executions[0].agent_nam
 
 ### 2d.2 Agent 间通信
 
-- [ ] 步骤间传递结构化 `Message`：`{from_step, to_step, type: "feedback"|"handoff"|"query", payload}`
-- [ ] 新增步骤类型 `handoff`：将一个 Agent 的输出传递给另一个 Agent
-- [ ] 协作流水线模板：`analyst → developer → reviewer → tester`
+- [x] 步骤间传递结构化 `Message`：`{from_step, to_step, type: "feedback"|"handoff"|"query", payload}`
+- [x] 新增步骤类型 `handoff`：将一个 Agent 的输出传递给另一个 Agent
+- [x] 协作流水线模板：`analyst → developer → reviewer → tester`
 
 **验收方式** 🟢
 
@@ -512,10 +512,10 @@ curl -s http://localhost:8000/api/tasks/{id} | jq '.step_executions[2].input'
 
 ### 2d.3 插件市场
 
-- [ ] 插件注册表 API：`GET/POST /api/plugins/marketplace`
-- [ ] CLI：`agent-orch plugin install <url>` 和 `agent-orch plugin uninstall <name>`
-- [ ] 前端插件市场页面：浏览/搜索/一键安装
-- [ ] 插件 Manifest 规范：`plugin.yaml` 包含 name/version/compatibility/schema
+- [x] 插件注册表 API：`GET/POST /api/plugins/marketplace`
+- [x] CLI：`agent-orch plugin install <url>` 和 `agent-orch plugin uninstall <name>`
+- [x] 前端插件市场页面：浏览/搜索/一键安装
+- [x] 插件 Manifest 规范：`plugin.yaml` 包含 name/version/compatibility/schema
 
 **验收方式** 🟢🟡
 
@@ -541,10 +541,10 @@ curl -s http://localhost:8000/plugins | head -20
 
 ### 2d.4 第三方集成扩展
 
-- [ ] Jira 集成：从 Issue 创建任务、同步状态
-- [ ] Linear 集成：同上
-- [ ] Confluence 集成：将执行报告发布为 Confluence 页面
-- [ ] Prometheus metrics 端点：`GET /metrics`
+- [x] Jira 集成：从 Issue 创建任务、同步状态
+- [x] Linear 集成：同上
+- [x] Confluence 集成：将执行报告发布为 Confluence 页面
+- [x] Prometheus metrics 端点：`GET /metrics`
 
 **验收方式** 🟢🟡
 
