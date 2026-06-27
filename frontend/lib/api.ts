@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 const REQUEST_TIMEOUT = 30000; // 30 秒
 
@@ -23,6 +23,33 @@ export function removeToken(): void {
 
 export function isAuthenticated(): boolean {
   return !!getToken();
+}
+
+/** 尝试用 refresh token 刷新 access token。返回新的 access token 或 null。 */
+async function attemptTokenRefresh(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const refreshToken = localStorage.getItem("refresh_token");
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+      removeToken();
+      return null;
+    }
+    const data = await res.json();
+    setToken(data.access_token);
+    if (data.refresh_token) {
+      localStorage.setItem("refresh_token", data.refresh_token);
+    }
+    return data.access_token;
+  } catch {
+    removeToken();
+    return null;
+  }
 }
 
 /** 友好的错误提示 */
@@ -74,6 +101,23 @@ async function request<T>(
     });
 
     if (!res.ok) {
+      // 401 时尝试自动刷新 token 后重试（避免循环）
+      if (res.status === 401 && token && !path.includes("/auth/refresh")) {
+        const newToken = await attemptTokenRefresh();
+        if (newToken) {
+          headers["Authorization"] = `Bearer ${newToken}`;
+          const retryRes = await fetch(`${API_BASE}${path}`, {
+            headers,
+            signal: controller.signal,
+            ...options,
+          });
+          if (retryRes.ok) {
+            clearTimeout(timeoutId);
+            if (retryRes.status === 204) return undefined as T;
+            return retryRes.json();
+          }
+        }
+      }
       // 401 时自动清除过期 token
       if (res.status === 401 && token) {
         removeToken();
@@ -85,7 +129,7 @@ async function request<T>(
     return res.json();
   } catch (err) {
     if (err instanceof TypeError && err.message === "Failed to fetch") {
-      throw new Error("无法连接到后端服务，请确认后端已启动 (http://127.0.0.1:8000)");
+      throw new Error("无法连接到后端服务，请确认后端已启动");
     }
     throw err;
   } finally {
@@ -386,15 +430,104 @@ export const notificationApi = {
       body: JSON.stringify(data),
     }),
   testSlack: () =>
-    request<{ success: boolean; message: string }>("/api/notifications/test/slack", {
+    request<{ results: Record<string, boolean> }>("/api/notifications/test", {
       method: "POST",
+      body: JSON.stringify({ channel: "slack", message: "这是一条来自 Agent Orchestrator 的测试通知" }),
     }),
   testDingtalk: () =>
-    request<{ success: boolean; message: string }>("/api/notifications/test/dingtalk", {
+    request<{ results: Record<string, boolean> }>("/api/notifications/test", {
       method: "POST",
+      body: JSON.stringify({ channel: "dingtalk", message: "这是一条来自 Agent Orchestrator 的测试通知" }),
     }),
   history: (limit = 50) =>
     request<NotificationHistoryResponse>(`/api/notifications/history?limit=${limit}`),
+};
+
+// === Settings ===
+export interface ApiProviderInfo {
+  name: string;
+  display_name: string;
+  key_configured: boolean;
+  key_preview: string | null;
+  base_url: string;
+  models: string[];
+}
+
+export interface ApiKeysResponse {
+  providers: ApiProviderInfo[];
+  default_provider: string;
+  default_model: string;
+}
+
+export const settingsApi = {
+  getApiKeys: () => request<ApiKeysResponse>("/api/settings/api-keys"),
+  updateApiKey: (data: { provider: string; api_key: string; base_url?: string }) =>
+    request<{ status: string; provider: string; key_preview: string }>("/api/settings/api-keys", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  testConnection: (data: { provider: string; api_key?: string }) =>
+    request<{ success: boolean; message: string }>("/api/settings/test-connection", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getDefaults: () =>
+    request<{ default_provider: string; default_model: string }>("/api/settings"),
+  updateDefaults: (data: { default_provider: string; default_model: string }) =>
+    request<{ status: string }>("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+};
+
+// === Agent Config ===
+export interface AgentConfigItem {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string | null;
+  capabilities: string[];
+  provider: string;
+  model: string;
+  max_tokens: number;
+  temperature: number;
+  timeout_seconds: number;
+  token_budget: number;
+  enabled: boolean;
+  created_at: string | null;
+}
+
+export interface AgentCreatePayload {
+  name: string;
+  display_name: string;
+  description?: string | null;
+  capabilities?: string[];
+  provider?: string;
+  model?: string;
+  max_tokens?: number;
+  temperature?: number;
+  timeout_seconds?: number;
+  token_budget?: number;
+  enabled?: boolean;
+}
+
+export const agentApi = {
+  list: () => request<AgentConfigItem[]>("/api/agents"),
+  get: (id: string) => request<AgentConfigItem>(`/api/agents/${id}`),
+  create: (data: AgentCreatePayload) =>
+    request<AgentConfigItem>("/api/agents", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: AgentCreatePayload) =>
+    request<AgentConfigItem>(`/api/agents/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    request<void>(`/api/agents/${id}`, { method: "DELETE" }),
+  match: (stepType: string) =>
+    request<AgentConfigItem[]>(`/api/agents/match/${stepType}`),
 };
 
 // === Audit Reports ===
@@ -416,7 +549,6 @@ export const auditApi = {
   listReports: (signal?: AbortSignal) =>
     request<AuditReportListResponse>("/api/audit/reports", { signal }),
   generateReport: async (startDate: string, endDate: string, format: string = "csv") => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     const headers: Record<string, string> = {};
     const token = getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;

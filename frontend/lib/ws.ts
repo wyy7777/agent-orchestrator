@@ -1,7 +1,10 @@
 type MessageHandler = (data: Record<string, unknown>) => void;
 
 function getWsUrl() {
-  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}/ws`;
+  }
   return "ws://127.0.0.1:8000/ws";
 }
 
@@ -21,7 +24,15 @@ export function connectWebSocket(taskId?: string) {
   currentTaskId = taskId;
 
   const WS_URL = getWsUrl();
-  const url = taskId ? `${WS_URL}?task_id=${taskId}` : WS_URL;
+  const params = new URLSearchParams();
+  if (taskId) params.set("task_id", taskId);
+
+  // 附加 JWT token 用于 WebSocket 认证
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  if (token) params.set("token", token);
+
+  const qs = params.toString();
+  const url = qs ? `${WS_URL}?${qs}` : WS_URL;
   ws = new WebSocket(url);
 
   ws.onopen = () => {

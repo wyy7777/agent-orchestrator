@@ -27,6 +27,13 @@ export default function App({ Component, pageProps }: AppProps) {
     // 检查是否需要显示引导
     const onboardingDone = localStorage.getItem("onboarding_completed");
     if (!onboardingDone) setShowOnboarding(true);
+
+    // 注册 Service Worker（PWA 离线支持）
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        // SW 注册失败不影响主功能
+      });
+    }
   }, []);
 
   const toggleDark = () => {

@@ -50,6 +50,10 @@ const nodeStyles: Record<string, { bg: string; border: string; icon: string }> =
   subtask: { bg: "#e6fffb", border: "#13c2c2", icon: "📎" },
   loop: { bg: "#fff0f6", border: "#eb2f96", icon: "🔄" },
   plugin: { bg: "#f0f5ff", border: "#2f54eb", icon: "🔌" },
+  handoff: { bg: "#fcffe6", border: "#a0d911", icon: "🤝" },
+  publish: { bg: "#fff0f6", border: "#eb2f96", icon: "📢" },
+  condition: { bg: "#fff7e6", border: "#faad14", icon: "❓" },
+  script: { bg: "#f0f5ff", border: "#2f54eb", icon: "📜" },
 };
 
 // 自定义节点组件
@@ -86,8 +90,12 @@ const STEP_TYPES = [
   { value: "review", label: "审查 (Review)" },
   { value: "approval", label: "审批 (Approval)" },
   { value: "merge", label: "合并 (Merge)" },
+  { value: "handoff", label: "🤝 交接 (Handoff)" },
+  { value: "publish", label: "📢 发布 (Publish)" },
   { value: "subtask", label: "子任务 (Subtask)" },
   { value: "loop", label: "循环 (Loop)" },
+  { value: "condition", label: "条件 (Condition)" },
+  { value: "script", label: "脚本 (Script)" },
   { value: "plugin", label: "插件 (Plugin)" },
 ];
 
@@ -309,6 +317,54 @@ export default function WorkflowEditorPage() {
             <Form.Item name="prompt_template" label="提示词模板">
               <Input.TextArea rows={4} placeholder="自定义提示词..." />
             </Form.Item>
+
+            {/* Handoff 专属配置 */}
+            {(selectedNode?.data as any)?.type === "handoff" && (
+              <>
+                <Form.Item name="from_step" label="源步骤名称">
+                  <Input placeholder="从哪个步骤读取输出" />
+                </Form.Item>
+                <Form.Item name="to_step" label="目标步骤名称">
+                  <Input placeholder="数据传递给哪个步骤" />
+                </Form.Item>
+                <Form.Item name="mapping" label="字段映射 (JSON)">
+                  <Input.TextArea
+                    rows={3}
+                    placeholder='{"source.field": "target_field"}'
+                  />
+                </Form.Item>
+                <Form.Item name="message_type" label="消息类型">
+                  <Select
+                    options={[
+                      { value: "data", label: "数据传递" },
+                      { value: "instruction", label: "指令" },
+                      { value: "feedback", label: "反馈" },
+                    ]}
+                  />
+                </Form.Item>
+              </>
+            )}
+
+            {/* Publish 专属配置 */}
+            {(selectedNode?.data as any)?.type === "publish" && (
+              <>
+                <Form.Item name="platform" label="发布平台">
+                  <Select
+                    options={[{ value: "confluence", label: "Confluence" }]}
+                  />
+                </Form.Item>
+                <Form.Item name="base_url" label="平台 URL">
+                  <Input placeholder="https://your-domain.atlassian.net" />
+                </Form.Item>
+                <Form.Item name="space_key" label="空间 Key">
+                  <Input placeholder="SPACE" />
+                </Form.Item>
+                <Form.Item name="api_token" label="API Token">
+                  <Input.Password placeholder="API Token" />
+                </Form.Item>
+              </>
+            )}
+
             <Form.Item>
               <Button type="primary" htmlType="submit" block>保存配置</Button>
             </Form.Item>

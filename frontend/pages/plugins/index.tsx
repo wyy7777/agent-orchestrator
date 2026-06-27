@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
   Typography, Card, Tag, Collapse, Row, Col, Spin, Empty, message, Descriptions, Space,
-  Button, Modal, Form, Input, Alert,
+  Button, Modal, Form, Input, Alert, Popconfirm,
 } from "antd";
-import { ApiOutlined, PlayCircleOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { ApiOutlined, PlayCircleOutlined, ThunderboltOutlined, PlusOutlined, DeleteOutlined, DownloadOutlined } from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -32,7 +32,7 @@ interface PluginItem {
 
 // ==================== API ====================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 async function fetchPlugins(): Promise<PluginItem[]> {
   const res = await fetch(`${API_BASE}/api/plugins`);
@@ -41,6 +41,27 @@ async function fetchPlugins(): Promise<PluginItem[]> {
     throw new Error(err.detail || `请求失败: ${res.status}`);
   }
   return res.json();
+}
+
+async function installPlugin(source: string): Promise<{ status: string; name: string }> {
+  const res = await fetch(`${API_BASE}/api/plugin-marketplace/install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: source }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `安装失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function uninstallPlugin(name: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/plugin-marketplace/uninstall/${name}`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `卸载失败: ${res.status}`);
+  }
 }
 
 // ==================== Schema 字段渲染 ====================
@@ -92,11 +113,13 @@ function SchemaFieldTable({ properties, required }: { properties: Record<string,
 interface PluginCardProps {
   plugin: PluginItem;
   onTest: (plugin: PluginItem) => void;
+  onUninstall?: (name: string) => void;
 }
 
-function PluginCard({ plugin, onTest }: PluginCardProps) {
+function PluginCard({ plugin, onTest, onUninstall }: PluginCardProps) {
   const hasSchema = plugin.schema?.properties && Object.keys(plugin.schema.properties).length > 0;
   const fieldCount = hasSchema ? Object.keys(plugin.schema.properties!).length : 0;
+  const isExternal = (plugin as any).source === "external";
 
   return (
     <Card
@@ -111,6 +134,17 @@ function PluginCard({ plugin, onTest }: PluginCardProps) {
         >
           测试
         </Button>,
+        ...(isExternal && onUninstall ? [
+          <Popconfirm
+            key="uninstall"
+            title={`确认卸载插件 ${plugin.name}？`}
+            onConfirm={() => onUninstall(plugin.name)}
+          >
+            <Button type="link" danger icon={<DeleteOutlined />}>
+              卸载
+            </Button>
+          </Popconfirm>,
+        ] : []),
       ]}
     >
       <Card.Meta
@@ -170,22 +204,27 @@ export default function PluginsPage() {
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [testModalOpen, setTestModalOpen] = useState(false);
+  const [installModalOpen, setInstallModalOpen] = useState(false);
   const [selectedPlugin, setSelectedPlugin] = useState<PluginItem | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; result?: unknown; error?: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [form] = Form.useForm();
+  const [installForm] = Form.useForm();
+
+  const loadPlugins = async () => {
+    try {
+      const data = await fetchPlugins();
+      setPlugins(data);
+    } catch {
+      message.error("加载插件列表失败");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await fetchPlugins();
-        setPlugins(data);
-      } catch {
-        message.error("加载插件列表失败");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    loadPlugins();
   }, []);
 
   const handleTest = (plugin: PluginItem) => {
@@ -195,12 +234,36 @@ export default function PluginsPage() {
     form.resetFields();
   };
 
+  const handleInstall = async (values: { source: string }) => {
+    setInstalling(true);
+    try {
+      const result = await installPlugin(values.source);
+      message.success(`插件 ${result.name} 安装成功`);
+      setInstallModalOpen(false);
+      installForm.resetFields();
+      loadPlugins();
+    } catch (err) {
+      message.error((err as Error).message || "安装失败");
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const handleUninstall = async (name: string) => {
+    try {
+      await uninstallPlugin(name);
+      message.success(`插件 ${name} 已卸载`);
+      loadPlugins();
+    } catch (err) {
+      message.error((err as Error).message || "卸载失败");
+    }
+  };
+
   const handleRunTest = async (values: Record<string, unknown>) => {
     if (!selectedPlugin) return;
     setTesting(true);
     setTestResult(null);
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:18000";
       const res = await fetch(`${API_BASE}/api/plugins/${selectedPlugin.name}/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -225,14 +288,23 @@ export default function PluginsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <Title level={3}>
-          <ApiOutlined style={{ marginRight: 8 }} />
-          插件管理
-        </Title>
-        <Text type="secondary">
-          查看所有可用的步骤插件及其配置信息，这些插件可在工作流 YAML 中作为 step 使用。
-        </Text>
+      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <Title level={3}>
+            <ApiOutlined style={{ marginRight: 8 }} />
+            插件管理
+          </Title>
+          <Text type="secondary">
+            查看所有可用的步骤插件及其配置信息，这些插件可在工作流 YAML 中作为 step 使用。
+          </Text>
+        </div>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setInstallModalOpen(true)}
+        >
+          安装插件
+        </Button>
       </div>
 
       {plugins.length === 0 ? (
@@ -243,11 +315,46 @@ export default function PluginsPage() {
         <Row gutter={[16, 16]}>
           {plugins.map((plugin) => (
             <Col key={plugin.name} xs={24} sm={12} lg={8}>
-              <PluginCard plugin={plugin} onTest={handleTest} />
+              <PluginCard plugin={plugin} onTest={handleTest} onUninstall={handleUninstall} />
             </Col>
           ))}
         </Row>
       )}
+
+      {/* 安装插件 Modal */}
+      <Modal
+        title="安装插件"
+        open={installModalOpen}
+        onCancel={() => setInstallModalOpen(false)}
+        footer={null}
+        width={500}
+      >
+        <Alert
+          type="info"
+          message="支持本地 .py 文件路径或 HTTP(S) URL"
+          style={{ marginBottom: 16 }}
+        />
+        <Form form={installForm} onFinish={handleInstall} layout="vertical">
+          <Form.Item
+            name="source"
+            label="插件来源"
+            rules={[{ required: true, message: "请输入插件路径或 URL" }]}
+          >
+            <Input placeholder="/path/to/plugin.py 或 https://example.com/plugin.py" />
+          </Form.Item>
+          <Form.Item>
+            <Button
+              type="primary"
+              htmlType="submit"
+              loading={installing}
+              icon={<DownloadOutlined />}
+              block
+            >
+              安装
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* 插件测试 Modal */}
       <Modal

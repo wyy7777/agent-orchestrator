@@ -12,8 +12,13 @@ import {
   ThunderboltOutlined,
   ImportOutlined,
   BellOutlined,
+  KeyOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  ApiOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
+import { settingsApi } from "@/lib/api";
 
 const Line = dynamic(() => import("@ant-design/charts").then((m) => m.Line), { ssr: false });
 const Pie = dynamic(() => import("@ant-design/charts").then((m) => m.Pie), { ssr: false });
@@ -78,40 +83,53 @@ export default function DashboardPage() {
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [showWelcome, setShowWelcome] = useState(false);
   const [qualityTrends, setQualityTrends] = useState<QualityTrendItem[]>([]);
+  const [apiStatus, setApiStatus] = useState<{ provider: string; model: string; configured: boolean } | null>(null);
   const router = useRouter();
   const { t, locale } = useI18n();
 
   const loadData = async (signal?: AbortSignal) => {
     setLoading(true);
-    try {
-      const [statsData, tasksData, wfData, allTasksData] = await Promise.all([
-        dashboardApi.stats(signal),
-        taskApi.list({ page_size: 10, signal }),
-        workflowApi.list(0, 100, signal),
-        taskApi.list({ page_size: 200, signal }),
-      ]);
 
-      // 质量趋势（独立加载，失败不阻塞）
-      try {
-        const qTrends = await dashboardApi.qualityTrends(30, signal);
-        if (!signal?.aborted) setQualityTrends(qTrends.trends);
-      } catch { /* 无质量数据时静默忽略 */ }
-      if (signal?.aborted) return;
-      setStats(statsData);
-      setRecentTasks(tasksData.items);
-      setAllTasks(allTasksData.items);
+    // 每个 API 独立加载，失败不阻塞其他数据
+    const [statsData, tasksData, wfData, allTasksData] = await Promise.all([
+      dashboardApi.stats(signal).catch(() => null),
+      taskApi.list({ page_size: 10, signal }).catch(() => null),
+      workflowApi.list(0, 100, signal).catch(() => null),
+      taskApi.list({ page_size: 200, signal }).catch(() => null),
+    ]);
 
+    if (signal?.aborted) return;
+
+    if (statsData) setStats(statsData);
+    if (tasksData) setRecentTasks(tasksData.items);
+    if (allTasksData) setAllTasks(allTasksData.items);
+    if (wfData) {
       const wfMap: Record<string, WorkflowItem> = {};
       wfData.items.forEach((w) => (wfMap[w.id] = w));
       setWorkflows(wfMap);
-    } catch (err) {
+    }
+
+    // 质量趋势（独立加载，失败不阻塞）
+    try {
+      const qTrends = await dashboardApi.qualityTrends(30, signal);
+      if (!signal?.aborted) setQualityTrends(qTrends.trends);
+    } catch { /* 无质量数据时静默忽略 */ }
+
+    // API 状态（独立加载，失败不阻塞）
+    try {
+      const apiData = await settingsApi.getApiKeys();
+      const defaultP = apiData.providers.find((p) => p.name === apiData.default_provider);
       if (!signal?.aborted) {
-        message.error(t("common.error"));
+        setApiStatus({
+          provider: apiData.default_provider,
+          model: apiData.default_model,
+          configured: defaultP?.key_configured || false,
+        });
       }
-    } finally {
-      if (!signal?.aborted) {
-        setLoading(false);
-      }
+    } catch { /* 静默忽略 */ }
+
+    if (!signal?.aborted) {
+      setLoading(false);
     }
   };
 
@@ -298,6 +316,43 @@ export default function DashboardPage() {
         </div>
       ) : (
       <> {/* 基础统计卡片 */}
+        {/* API 状态指示 */}
+        {apiStatus && (
+          <Card
+            size="small"
+            style={{ marginBottom: 16, background: apiStatus.configured ? "#f6ffed" : "#fff7e6" }}
+            bodyStyle={{ padding: "8px 16px" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <Space>
+                <ApiOutlined style={{ color: apiStatus.configured ? "#52c41a" : "#faad14" }} />
+                <Text>
+                  {locale === "zh" ? "当前 API:" : "Current API:"}{" "}
+                  <Text strong>{apiStatus.provider}</Text>{" "}
+                  <Text type="secondary">({apiStatus.model})</Text>
+                </Text>
+                {apiStatus.configured ? (
+                  <Tag icon={<CheckCircleOutlined />} color="success">
+                    {locale === "zh" ? "已连接" : "Connected"}
+                  </Tag>
+                ) : (
+                  <Tag icon={<CloseCircleOutlined />} color="warning">
+                    {locale === "zh" ? "未配置 Key" : "Key not set"}
+                  </Tag>
+                )}
+              </Space>
+              <Button
+                type="link"
+                size="small"
+                icon={<KeyOutlined />}
+                onClick={() => router.push("/settings/api")}
+              >
+                {locale === "zh" ? "切换" : "Switch"}
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* 基础统计卡片 */}
         <DashboardStats stats={stats} />
 

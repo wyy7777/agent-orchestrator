@@ -7,6 +7,9 @@
     "shell:default",
     "shell:allow-execute",
     "shell:allow-spawn",
-    "shell:allow-kill"
+    "shell:allow-kill",
+    "updater:default",
+    "global-shortcut:default",
+    "autostart:default"
   ]
 }

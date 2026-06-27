@@ -18,9 +18,11 @@ struct BackendState {
 fn create_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, "show", "打开窗口", true, None::<&str>)?;
     let pending = MenuItem::with_id(app, "pending", "待审批: 加载中...", true, None::<&str>)?;
+    let check_update = MenuItem::with_id(app, "check_update", "检查更新", true, None::<&str>)?;
+    let version = MenuItem::with_id(app, "version", "v1.2.0", false, None::<&str>)?;
     let separator = MenuItem::with_id(app, "sep1", "", false, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    Menu::with_items(app, &[&show, &pending, &separator, &quit])
+    Menu::with_items(app, &[&show, &pending, &check_update, &version, &separator, &quit])
 }
 
 fn main() {
@@ -48,6 +50,15 @@ fn main() {
                             if let Some(window) = app.get_webview_window("main") {
                                 let _ = window.show();
                                 let _ = window.set_focus();
+                            }
+                        }
+                        "check_update" => {
+                            // 显示窗口并触发前端检查更新
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                // 通过 evaluate_js 触发前端的更新检查
+                                let _ = window.eval("window.dispatchEvent(new CustomEvent('tray-check-update'))");
                             }
                         }
                         "quit" => {
@@ -137,6 +148,44 @@ fn main() {
                     let _ = window.hide();
                 }
             }
+
+            // 定时轮询待审批数量并更新托盘菜单
+            let app_handle_poll = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // 等待后端启动
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                loop {
+                    // 发送 HTTP 请求获取待审批数量
+                    let count = match reqwest::get("http://127.0.0.1:8000/api/dashboard/stats").await {
+                        Ok(resp) => {
+                            match resp.json::<serde_json::Value>().await {
+                                Ok(data) => data.get("pending_approvals")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0),
+                                Err(_) => 0,
+                            }
+                        }
+                        Err(_) => 0,
+                    };
+
+                    // 更新托盘菜单文字
+                    let label = if count > 0 {
+                        format!("待审批: {} 条", count)
+                    } else {
+                        "待审批: 无".to_string()
+                    };
+                    if let Some(window) = app_handle_poll.get_webview_window("main") {
+                        let _ = window.set_title(&format!("Agent Orchestrator{}", if count > 0 { format!(" ({} 待审批)", count) } else { String::new() }));
+                    }
+                    // 更新托盘菜单项文字（动态刷新）
+                    if let Some(pending_item) = app_handle_poll.try_menu::<tauri::menu::MenuItem<tauri::Wry>>("pending") {
+                        let _ = pending_item.set_text(&label);
+                    }
+                    println!("托盘待审批更新: {}", label);
+
+                    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                }
+            });
 
             Ok(())
         })

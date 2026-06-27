@@ -17,10 +17,16 @@ import {
   SettingOutlined,
   MenuOutlined,
   CloudServerOutlined,
+  RobotOutlined,
+  LinkOutlined,
+  CloudDownloadOutlined,
+  KeyOutlined,
 } from "@ant-design/icons";
 import { useRouter } from "next/router";
 import { useI18n } from "@/lib/i18n";
 import { dashboardApi } from "@/lib/api";
+import { useUpdater } from "@/lib/useUpdater";
+import UpdateDialog from "@/components/UpdateDialog";
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -36,6 +42,8 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
   const [pendingCount, setPendingCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const updater = useUpdater();
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
   const { locale, t, setLocale } = useI18n();
 
@@ -89,6 +97,24 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // 自动弹出更新对话框（静默检查发现更新时）
+  useEffect(() => {
+    if (updater.updateAvailable && updater.update && !updateDialogOpen) {
+      setUpdateDialogOpen(true);
+    }
+  }, [updater.updateAvailable, updater.update]);
+
+  // 监听托盘菜单"检查更新"事件
+  useEffect(() => {
+    const handleTrayCheckUpdate = () => {
+      updater.checkForUpdates().then(() => {
+        setUpdateDialogOpen(true);
+      });
+    };
+    window.addEventListener("tray-check-update", handleTrayCheckUpdate);
+    return () => window.removeEventListener("tray-check-update", handleTrayCheckUpdate);
+  }, [updater.checkForUpdates]);
+
   const menuItems = [
     { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
     { key: "/workflows", icon: <BranchesOutlined />, label: t("nav.workflows") },
@@ -97,6 +123,9 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
     { key: "/triggers", icon: <ThunderboltOutlined />, label: t("nav.triggers") },
     { key: "/plugins", icon: <ApiOutlined />, label: t("nav.plugins") },
     { key: "/sandboxes", icon: <CloudServerOutlined />, label: locale === "zh" ? "沙箱" : "Sandboxes" },
+    { key: "/settings/agents", icon: <RobotOutlined />, label: locale === "zh" ? "Agent 管理" : "Agents" },
+    { key: "/settings/api", icon: <KeyOutlined />, label: locale === "zh" ? "API 配置" : "API Config" },
+    { key: "/settings/integrations", icon: <LinkOutlined />, label: locale === "zh" ? "集成" : "Integrations" },
     { key: "/settings/notifications", icon: <SettingOutlined />, label: t("nav.settings") },
   ];
 
@@ -205,6 +234,30 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
                 />
               </Badge>
             </Tooltip>
+            {/* 检查更新（仅桌面环境显示） */}
+            {updater.isTauri && (
+              <Tooltip title={updater.checking ? t("updater.checking") : t("updater.check")}>
+                <Badge dot={updater.updateAvailable} offset={[-2, 2]}>
+                  <Button
+                    type="text"
+                    icon={<CloudDownloadOutlined spin={updater.checking} />}
+                    onClick={() => {
+                      if (updater.updateAvailable) {
+                        setUpdateDialogOpen(true);
+                      } else {
+                        updater.checkForUpdates().then(() => {
+                          if (updater.updateAvailable) {
+                            setUpdateDialogOpen(true);
+                          } else if (!updater.error) {
+                            message.success(t("updater.up_to_date"));
+                          }
+                        });
+                      }
+                    }}
+                  />
+                </Badge>
+              </Tooltip>
+            )}
             <Tooltip title={locale === "zh" ? "设置" : "Settings"}>
               <Button
                 type="text"
@@ -244,6 +297,16 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
           {children}
         </Content>
       </AntLayout>
+
+      {/* 更新对话框 */}
+      <UpdateDialog
+        open={updateDialogOpen}
+        onClose={() => setUpdateDialogOpen(false)}
+        update={updater.update}
+        downloading={updater.downloading}
+        downloadProgress={updater.downloadProgress}
+        onInstall={updater.installUpdate}
+      />
     </AntLayout>
   );
 }

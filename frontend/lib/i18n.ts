@@ -212,6 +212,40 @@ const translations: Record<Locale, Record<string, string>> = {
     "sandbox.mode": "模式",
     "sandbox.local": "本地",
     "sandbox.docker": "Docker",
+
+    // 更新器
+    "updater.check": "检查更新",
+    "updater.checking": "正在检查...",
+    "updater.up_to_date": "已是最新版本",
+    "updater.new_version": "发现新版本",
+    "updater.current_version": "当前版本",
+    "updater.downloading": "下载中...",
+    "updater.install_now": "立即更新",
+    "updater.later": "稍后提醒",
+    "updater.error": "检查更新失败",
+
+    // API 配置
+    "nav.api_config": "API 配置",
+    "api.title": "API 配置",
+    "api.default_model": "默认模型（全站通用）",
+    "api.provider": "Provider",
+    "api.model": "Model",
+    "api.key_management": "API Key 管理",
+    "api.key_configured": "已配置",
+    "api.key_not_configured": "未配置",
+    "api.test": "测试",
+    "api.edit": "修改",
+    "api.set": "设置",
+    "api.save": "保存",
+    "api.cancel": "取消",
+    "api.save_success": "API Key 已保存",
+    "api.save_failed": "保存失败",
+    "api.test_success": "连接成功",
+    "api.test_failed": "连接失败",
+    "api.current": "当前 API",
+    "api.connected": "已连接",
+    "api.not_configured": "未配置 Key",
+    "api.switch": "切换",
   },
   en: {
     // Common
@@ -379,6 +413,17 @@ const translations: Record<Locale, Record<string, string>> = {
     "sandbox.local": "Local",
     "sandbox.docker": "Docker",
 
+    // Updater
+    "updater.check": "Check for Updates",
+    "updater.checking": "Checking...",
+    "updater.up_to_date": "Up to date",
+    "updater.new_version": "New version available",
+    "updater.current_version": "Current version",
+    "updater.downloading": "Downloading...",
+    "updater.install_now": "Install Now",
+    "updater.later": "Remind Later",
+    "updater.error": "Update check failed",
+
     // Login
     "login.title": "Agent Orchestrator",
     "login.subtitle": "AI Agent Workflow Orchestration Platform",
@@ -404,6 +449,29 @@ const translations: Record<Locale, Record<string, string>> = {
     // WebSocket
     "ws.disconnected": "Connection lost, reconnecting...",
     "ws.reconnected": "Reconnected",
+
+    // API Config
+    "nav.api_config": "API Config",
+    "api.title": "API Configuration",
+    "api.default_model": "Default Model (Global)",
+    "api.provider": "Provider",
+    "api.model": "Model",
+    "api.key_management": "API Key Management",
+    "api.key_configured": "Configured",
+    "api.key_not_configured": "Not Configured",
+    "api.test": "Test",
+    "api.edit": "Edit",
+    "api.set": "Set",
+    "api.save": "Save",
+    "api.cancel": "Cancel",
+    "api.save_success": "API Key saved",
+    "api.save_failed": "Save failed",
+    "api.test_success": "Connection successful",
+    "api.test_failed": "Connection failed",
+    "api.current": "Current API",
+    "api.connected": "Connected",
+    "api.not_configured": "Key not set",
+    "api.switch": "Switch",
   },
 };
 
