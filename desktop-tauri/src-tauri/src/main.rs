@@ -177,10 +177,14 @@ fn main() {
                     if let Some(window) = app_handle_poll.get_webview_window("main") {
                         let _ = window.set_title(&format!("Agent Orchestrator{}", if count > 0 { format!(" ({} 待审批)", count) } else { String::new() }));
                     }
-                    // 更新托盘菜单项文字（动态刷新）
-                    if let Some(pending_item) = app_handle_poll.try_menu::<tauri::menu::MenuItem<tauri::Wry>>("pending") {
-                        let _ = pending_item.set_text(&label);
-                    }
+                    // TODO: Tauri 2.11 API changed — tray menu items are no longer accessible
+                    // by string ID via try_menu/get_menu_item. The pending count is
+                    // still shown in the window title (line above). Re-enable dynamic
+                    // tray updates once the new API is adopted.
+                    // if let Some(pending_item) = app_handle_poll.menu_item("pending") {
+                    //     let _ = pending_item.set_text(&label);
+                    // }
+                    let _ = label; // suppress unused warning on label
                     println!("托盘待审批更新: {}", label);
 
                     tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
