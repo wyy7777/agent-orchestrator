@@ -117,7 +117,11 @@ class WorkerSettings(WorkerSettings):
 
 
 async def enqueue_job(job_name: str, **kwargs: Any) -> str | None:
-    """将任务入队。返回 job_id。"""
+    """将任务入队。返回 job_id。
+
+    用法:
+        await enqueue_job("execute_workflow", workflow_id="xxx", task_id="yyy")
+    """
     if not settings.REDIS_URL:
         logger.warning("REDIS_URL 未配置，任务无法入队")
         return None
@@ -136,7 +140,7 @@ async def get_job_status(job_id: str) -> dict[str, Any] | None:
         job = await redis.get_job(job_id)
         if job is None:
             return None
-        result = await job.result(pole_delay=0)
+        result = await job.result(poll_delay=0)
         return {
             "job_id": job_id,
             "status": job.status.name if hasattr(job.status, "name") else str(job.status),

@@ -241,3 +241,26 @@ async def update_defaults(body: DefaultsUpdate):
 
     logger.info(f"默认模型已更新: {body.default_provider}/{body.default_model}")
     return {"status": "ok", "default_provider": body.default_provider, "default_model": body.default_model}
+
+
+# ── 版本检查与更新 ──
+
+
+@router.get("/version")
+async def get_version():
+    """获取当前版本信息。"""
+    from app.config import settings
+
+    return {
+        "current_version": settings.APP_VERSION,
+        "app_name": settings.APP_NAME,
+    }
+
+
+@router.post("/check-update")
+async def check_update():
+    """检查 GitHub 仓库是否有新版本。"""
+    from app.services.update_checker import check_for_updates
+
+    result = await check_for_updates()
+    return result

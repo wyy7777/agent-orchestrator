@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -5,20 +6,17 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.deps import get_engine
 from app.auth import require_role
 from app.database import get_db
-from app.engine.state_machine import ExecutionEngine
 from app.models.task import Task
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.task import TaskCreate, TaskListResponse, TaskResponse
 from app.services.ws_manager import ws_manager
 
+logger = logging.getLogger(__name__)
 
-def _get_engine(db: AsyncSession) -> ExecutionEngine:
-    """创建带事件回调的引擎实例。"""
-    from app.main import _engine_event_handler
-    return ExecutionEngine(db, on_event=_engine_event_handler)
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -170,14 +168,29 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{task_id}/start", response_model=TaskResponse)
 async def start_task(task_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator"))):
-    engine = _get_engine(db)
-    try:
+    # 当 Redis 可用时使用 ARQ 持久化队列，否则使用直接异步执行
+    from app.config import settings
+    if settings.REDIS_URL:
+        from app.services.arq_queue import enqueue_job
+        # 先初始化任务步骤记录
+        engine = get_engine(db)
         task = await engine.start_task(task_id)
         await db.refresh(task, attribute_names=["step_executions"])
+        # 入队到 ARQ 持久化队列
+        job_id = await enqueue_job("execute_workflow", workflow_id=task.workflow_id, task_id=task_id)
+        if job_id:
+            logger.info(f"任务 {task_id} 已入队 ARQ: job_id={job_id}")
         await ws_manager.broadcast_task_update(task_id, {"status": task.status})
         return task
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    else:
+        engine = get_engine(db)
+        try:
+            task = await engine.start_task(task_id)
+            await db.refresh(task, attribute_names=["step_executions"])
+            await ws_manager.broadcast_task_update(task_id, {"status": task.status})
+            return task
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/{task_id}/rollback", response_model=TaskResponse)
@@ -187,7 +200,7 @@ async def rollback_task(
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(require_role("admin", "manager")),
 ):
-    engine = _get_engine(db)
+    engine = get_engine(db)
     try:
         task = await engine.rollback_task(task_id, target_step_index)
         await db.refresh(task, attribute_names=["step_executions"])
@@ -199,7 +212,7 @@ async def rollback_task(
 
 @router.post("/{task_id}/resume", response_model=TaskResponse)
 async def resume_task(task_id: str, db: AsyncSession = Depends(get_db), _user: User = Depends(require_role("admin", "manager", "operator"))):
-    engine = _get_engine(db)
+    engine = get_engine(db)
     try:
         task = await engine.resume_task(task_id)
         await db.refresh(task, attribute_names=["step_executions"])

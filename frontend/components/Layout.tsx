@@ -27,6 +27,7 @@ import { useI18n } from "@/lib/i18n";
 import { dashboardApi } from "@/lib/api";
 import { useUpdater } from "@/lib/useUpdater";
 import UpdateDialog from "@/components/UpdateDialog";
+import { settingsApi } from "@/lib/api";
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -43,6 +44,7 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const updater = useUpdater();
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
   const { locale, t, setLocale } = useI18n();
@@ -233,6 +235,42 @@ export default function AppLayout({ children, darkMode, toggleDark }: AppLayoutP
                   onClick={() => router.push("/approvals")}
                 />
               </Badge>
+            </Tooltip>
+            {/* 检查更新 */}
+            <Tooltip title={locale === "zh" ? "检查更新" : "Check for Updates"}>
+              <Button
+                type="text"
+                icon={<CloudDownloadOutlined />}
+                loading={checkingUpdate}
+                onClick={async () => {
+                  setCheckingUpdate(true);
+                  try {
+                    const result = await settingsApi.checkUpdate();
+                    if (result.update_available) {
+                      message.success(
+                        locale === "zh"
+                          ? `发现新版本 v${result.latest_version}（当前 v${result.current_version}）`
+                          : `New version v${result.latest_version} available (current v${result.current_version})`
+                      );
+                      if (result.release_url) {
+                        window.open(result.release_url, "_blank");
+                      }
+                    } else if (result.error) {
+                      message.error(result.error);
+                    } else {
+                      message.success(
+                        locale === "zh"
+                          ? `已是最新版本 v${result.current_version}`
+                          : `Already up to date v${result.current_version}`
+                      );
+                    }
+                  } catch (err) {
+                    message.error((err as Error).message || "检查更新失败");
+                  } finally {
+                    setCheckingUpdate(false);
+                  }
+                }}
+              />
             </Tooltip>
             {/* 检查更新（仅桌面环境显示） */}
             {updater.isTauri && (

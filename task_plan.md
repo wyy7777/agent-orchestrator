@@ -32,10 +32,11 @@ Phase 2a ──── Phase 2b ──── Phase 2c ──── Phase 2d
 
 ### 2a.1 AI 质量自动评分
 
-- [ ] 新增 `QualityEvaluator` 服务，对 execute/review 步骤的输出做 AI 自评
+- [x] 新增 `QualityEvaluator` 服务，对 execute/review 步骤的输出做 AI 自评
   - 评分维度：正确性、完整性、安全性、代码风格（每个 1-10 分）
   - 集成到 `step_executor.py`，在步骤完成后异步触发
   - 评分结果写入 `step_execution.quality_score` JSON 字段
+- [x] 新增 10 个单元测试，quality_evaluator.py 覆盖率达 100%
 - [ ] 仪表盘新增"质量趋势"图表
 - [ ] 任务详情页展示每步质量评分
 

@@ -45,7 +45,8 @@ from app.services.ws_manager import ws_manager
 from app.telemetry import instrument_fastapi, instrument_httpx, setup_opentelemetry
 
 # 配置日志（控制台 + 文件旋转）
-setup_logging(log_level="DEBUG" if settings.DEBUG else "INFO")
+log_level = settings.LOG_LEVEL or ("DEBUG" if settings.DEBUG else "INFO")
+setup_logging(log_level=log_level)
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent.parent / "static"

@@ -1,6 +1,6 @@
 [project]
 name = "agent-orchestrator"
-version = "1.2.0"
+version = "1.3.0"
 description = "企业级 AI Agent 工作流编排平台"
 readme = "README.md"
 license = "MIT"
@@ -29,6 +29,8 @@ dependencies = [
     "docker>=7.1.0",
     "arq>=0.26.0",
     "redis>=5.2.0",
+    "starlette>=1.3.1",
+    "cryptography>=49.0.0",
 ]
 
 [project.optional-dependencies]

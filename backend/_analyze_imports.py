@@ -21,11 +21,10 @@ for f in sorted(root.rglob("*.py")):
                     parts = alias.name.split(".")
                     if len(parts) >= 2:
                         imports.add("app." + parts[1])
-        elif isinstance(node, ast.ImportFrom):
-            if node.module and node.module.startswith("app."):
-                parts = node.module.split(".")
-                if len(parts) >= 2:
-                    imports.add("app." + parts[1])
+        elif isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("app."):
+            parts = node.module.split(".")
+            if len(parts) >= 2:
+                imports.add("app." + parts[1])
     module_imports[rel] = sorted(imports)
 
 layers = {

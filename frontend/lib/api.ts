@@ -478,6 +478,18 @@ export const settingsApi = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
+  getVersion: () =>
+    request<{ current_version: string; app_name: string }>("/api/settings/version"),
+  checkUpdate: () =>
+    request<{
+      current_version: string;
+      latest_version: string;
+      update_available: boolean;
+      release_url: string;
+      release_notes: string;
+      published_at: string;
+      error?: string;
+    }>("/api/settings/check-update", { method: "POST" }),
 };
 
 // === Agent Config ===

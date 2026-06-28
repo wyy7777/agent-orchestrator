@@ -5,8 +5,9 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "Agent Orchestrator"
-    APP_VERSION: str = "1.2.0"
+    APP_VERSION: str = "1.3.0"
     DEBUG: bool = False
+    LOG_LEVEL: str = ""  # 可选：覆盖日志级别 (DEBUG/INFO/WARNING/ERROR)，为空则根据 DEBUG 自动选择
 
     # 数据库
     DATABASE_URL: str = "sqlite+aiosqlite:///./agent_orchestrator.db"

@@ -78,7 +78,7 @@ export default function UpdateDialog({
       <div style={{ marginBottom: 16 }}>
         <Space>
           <Text type="secondary">{t("updater.current_version")}:</Text>
-          <Tag>v{typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "1.2.0" : "—"}</Tag>
+          <Tag>v{typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "1.3.0" : "—"}</Tag>
           <Text type="secondary">→</Text>
           <Tag color="blue">v{update.version}</Tag>
         </Space>

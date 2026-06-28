@@ -13,14 +13,14 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     user_id: Mapped[str | None] = mapped_column(String(36), index=True)
     username: Mapped[str | None] = mapped_column(String(50))
 
     # 操作信息
     action: Mapped[str] = mapped_column(String(50), index=True)  # create/start/approve/reject/rollback/delete/update
     resource_type: Mapped[str] = mapped_column(String(50), index=True)  # workflow/task/approval/user/settings
-    resource_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    resource_id: Mapped[str | None] = mapped_column(String(36))
     resource_name: Mapped[str | None] = mapped_column(String(200))
 
     # 详情

@@ -46,6 +46,9 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
+    # 确保所有模型被导入，Base.metadata 包含全部表定义
+    import app.models  # noqa: F401
+
     async with engine.begin() as conn:
         if _is_postgres:
             # PostgreSQL 优化

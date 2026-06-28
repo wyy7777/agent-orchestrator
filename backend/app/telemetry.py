@@ -41,7 +41,7 @@ def setup_opentelemetry() -> bool:
         # 资源属性
         resource = Resource.create({
             "service.name": service_name,
-            "service.version": "1.2.0",
+            "service.version": "1.3.0",
             "telemetry.sdk.language": "python",
         })
 

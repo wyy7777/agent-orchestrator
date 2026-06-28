@@ -166,9 +166,9 @@ async def execute_single_step(
     if on_step_complete:
         await on_step_complete(context["task_id"], step_exec.step_name)
 
-    # 异步质量评分（fire-and-forget）
+    # 异步质量评分（fire-and-forget）— 传递 step_exec.id 而非 ORM 对象，避免 session 竞争
     if step_def.type in ("execute", "review", "analyze"):
-        asyncio.create_task(_evaluate_quality(step_exec, step_def, output, context, db))
+        asyncio.create_task(_evaluate_quality(step_exec.id, step_def, output, context))
 
     return output
 
@@ -309,7 +309,7 @@ async def execute_loop_step(
                     sub_step_exec, sub_def, task, iteration_context, db, on_step_complete
                 )
                 context["results"][sub_step_exec.step_name] = output
-            except (TimeoutError, Exception) as e:
+            except Exception as e:
                 sub_step_exec.status = StepStatus.FAILED.value
                 sub_step_exec.error_message = str(e)
                 sub_step_exec.completed_at = datetime.now(UTC)
@@ -328,13 +328,16 @@ async def execute_loop_step(
 
 
 async def _evaluate_quality(
-    step_exec: StepExecution,
+    step_exec_id: int,
     step_def: StepDefinition,
     output: dict[str, Any],
     context: dict[str, Any],
-    db: AsyncSession,
 ):
-    """异步质量评分（fire-and-forget）。"""
+    """异步质量评分（fire-and-forget）。
+
+    只接收 step_exec_id（标量 int），用独立 session 查询并写回，
+    避免与主流程 session 产生竞争条件（ARCH-2）。
+    """
     try:
         from app.database import async_session
         from app.services.quality_evaluator import quality_evaluator
@@ -344,12 +347,12 @@ async def _evaluate_quality(
         # 用独立 session 写回评分
         async with async_session() as write_db:
             result = await write_db.execute(
-                select(StepExecution).where(StepExecution.id == step_exec.id)
+                select(StepExecution).where(StepExecution.id == step_exec_id)
             )
             se = result.scalar_one_or_none()
             if se:
                 se.quality_score = score
                 await write_db.commit()
-                logger.info(f"质量评分已写入: {step_exec.step_name} → {score}")
+                logger.info(f"质量评分已写入: step_exec_id={step_exec_id} → {score}")
     except Exception as e:
-        logger.warning(f"质量评分写入失败: {e}")
+        logger.warning(f"质量评分写入失败 (step_exec_id={step_exec_id}): {e}")
